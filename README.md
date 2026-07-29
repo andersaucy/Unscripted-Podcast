@@ -3,7 +3,7 @@
 [![Validate CEP extension](https://github.com/andersaucy/Unscripted-Podcast/actions/workflows/validate.yml/badge.svg)](https://github.com/andersaucy/Unscripted-Podcast/actions/workflows/validate.yml)
 ![Premiere Pro](https://img.shields.io/badge/Premiere%20Pro-24%2B-9999ff)
 ![CEP](https://img.shields.io/badge/Adobe%20CEP-9.0-222222)
-![Version](https://img.shields.io/badge/version-1.0.0-4b8bf5)
+![Version](https://img.shields.io/badge/version-1.1.0-4b8bf5)
 
 A focused Adobe Premiere Pro automation panel for recurring podcast editing and
 delivery. It turns timestamp notes into export-ready sequences, normalizes quiet
@@ -23,6 +23,18 @@ loudness, and queue several output formats. Unscripted-Podcast consolidates thos
 steps into one Premiere panel while keeping editorial decisions inside Premiere.
 
 ## Features
+
+### Episode footage setup
+
+- Infers `Assets/Footage` from the active saved project's `Projects` ancestor.
+- Recursively imports media without opening Finder or Explorer.
+- Mirrors the on-disk directory hierarchy beneath a Premiere `Footage` bin.
+- Compares normalized media paths and skips clips already in the project.
+- Imports files independently so an unsupported sidecar cannot block a folder.
+- Interprets MXF audio as mono using embedded channel 1.
+- Interprets WAV audio as three mono clips using embedded channels 5, 6, and 7.
+- Provides a separate audio-configuration retry command and detailed results.
+- Prepares a clean bin for Premiere's supported multicamera creation workflow.
 
 ### Timestamp-driven clip assembly
 
@@ -89,6 +101,7 @@ flows.
 │       └── CSInterface.js     Adobe CEP bridge
 ├── host/
 │   ├── index.jsx              Shared helpers and task includes
+│   ├── episodeSetup.jsx       Footage import and audio interpretation
 │   ├── markClips.jsx          Timestamp-to-sequence workflow
 │   ├── loudness.jsx           Clip discovery and gain application
 │   └── renderUnscripted.jsx   Adobe Media Encoder queueing
@@ -134,6 +147,8 @@ updating the panel, then open **Window → Extensions → Unscripted-Podcast**.
 
 The baseline workflow expects:
 
+- A saved project inside an ancestor folder whose name contains `Projects`.
+- An `Assets/Footage` folder beside that `Projects` folder.
 - A sequence named `LowRes`.
 - A template sequence named `CLIP`.
 - Timestamp notes named `PodcastClips.txt` beside the saved project.
@@ -199,10 +214,10 @@ integration test inside Premiere with representative project media.
 
 ## Roadmap
 
-- Episode media import and bin organization.
-- Source audio-channel interpretation for recurring recorder formats.
-- Duplicate-import detection.
-- Guided multicamera sequence preparation.
+- Configurable episode folder and channel-mapping profiles.
+- Camera-label metadata derived from filename patterns.
+- Import progress events for very large episode folders.
+- Native multicamera creation when Adobe exposes a supported scripting API.
 - Configurable export presets through the panel UI.
 
 ## Status

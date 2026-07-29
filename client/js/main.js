@@ -5,6 +5,8 @@
 
     var els = {
         markClips: document.getElementById("btnMarkClips"),
+        importFootage: document.getElementById("btnImportFootage"),
+        configureAudio: document.getElementById("btnConfigureAudio"),
         render: document.getElementById("btnRender"),
         normalize: document.getElementById("btnNormalize"),
         detect: document.getElementById("btnDetect"),
@@ -61,6 +63,8 @@
     }
 
     function setBusy(isBusy) {
+        els.importFootage.disabled = isBusy;
+        els.configureAudio.disabled = isBusy;
         els.markClips.disabled = isBusy;
         els.render.disabled = isBusy;
         els.normalize.disabled = isBusy;
@@ -383,6 +387,14 @@
         var n = parseInt(els.clipCount.value, 10);
         var call = (!isNaN(n) && n > 0) ? "up_markClips(" + n + ")" : "up_markClips()";
         runTask("Marking clips", call);
+    });
+
+    els.importFootage.addEventListener("click", function () {
+        runTask("Importing and configuring footage", "up_importFootage()");
+    });
+
+    els.configureAudio.addEventListener("click", function () {
+        runTask("Configuring footage audio", "up_configureFootageAudio()");
     });
 
     els.normalize.addEventListener("click", normalizeDialogue);

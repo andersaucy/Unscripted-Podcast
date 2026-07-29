@@ -22,7 +22,7 @@ echo "Checking panel JavaScript..."
 node --check client/js/main.js
 
 echo "Checking ExtendScript task modules..."
-for source in host/markClips.jsx host/loudness.jsx host/renderUnscripted.jsx; do
+for source in host/markClips.jsx host/loudness.jsx host/renderUnscripted.jsx host/episodeSetup.jsx; do
     target="$temp_dir/$(basename "$source" .jsx).js"
     cp "$source" "$target"
     node --check "$target"
