@@ -12,7 +12,8 @@ Media Encoder.
 
 > Portfolio note: this repository is a sanitized development snapshot. Personal
 > filesystem paths and production-specific destinations have been replaced with
-> portable defaults.
+> portable defaults. The source is published for portfolio review; it is not
+> released under an open-source license.
 
 ## Why it exists
 
@@ -210,3 +211,12 @@ This is a working internal automation tool presented as a portfolio case study.
 It is not an Adobe product and is not affiliated with or endorsed by Adobe.
 
 See [CHANGELOG.md](CHANGELOG.md) for repository history.
+
+## License and third-party code
+
+Copyright © 2026 `andersaucy`. All rights reserved. The original project code is
+published for viewing and portfolio evaluation only; no permission to use,
+modify, redistribute, or commercialize it is granted. See [LICENSE.md](LICENSE.md).
+
+`client/js/CSInterface.js` is supplied by Adobe and remains governed by Adobe's
+own license terms. See [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
