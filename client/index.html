@@ -1,0 +1,65 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Unscripted-Podcast</title>
+    <link rel="stylesheet" href="css/style.css" />
+</head>
+<body>
+    <div class="app">
+        <header class="app__header">
+            <h1 class="app__title">Unscripted&#8209;Podcast</h1>
+            <p class="app__subtitle">Podcast automation panel</p>
+        </header>
+
+        <section class="config">
+            <label class="config__label" for="clipCount">Clip Count</label>
+            <input id="clipCount" class="config__input" type="number" min="0" step="1"
+                inputmode="numeric" placeholder="auto" />
+            <button id="btnDetect" class="config__btn" type="button"
+                title="Read the clip count from PodcastClips.txt">Detect from .txt</button>
+        </section>
+
+        <section class="config config--loudness">
+            <label class="config__label" for="threshold">Threshold</label>
+            <input id="threshold" class="config__input config__input--wide" type="number"
+                step="0.5" inputmode="decimal" value="-23" title="LUFS below which a track gets boosted" />
+            <label class="config__label" for="target">Target</label>
+            <input id="target" class="config__input config__input--wide" type="number"
+                step="0.5" inputmode="decimal" value="-20" title="LUFS to raise quiet tracks toward" />
+            <label class="config__check" title="Only analyze clips currently selected in the timeline">
+                <input id="selectedOnly" type="checkbox" /> Selected only
+            </label>
+        </section>
+
+        <main class="actions">
+            <button id="btnMarkClips" class="action" type="button">
+                <span class="action__label">Mark Clips</span>
+                <span class="action__desc">Read PodcastClips.txt, mark the LowRes sequence, build clip sequences &amp; transitions. Uses the Clip Count above (auto from the .txt).</span>
+            </button>
+
+            <button id="btnNormalize" class="action" type="button">
+                <span class="action__label">Normalize Dialogue</span>
+                <span class="action__desc">Measure integrated loudness (LUFS) of dialogue clips via ffmpeg and raise any track averaging below the Threshold up toward the Target. Only boosts; never lowers.</span>
+            </button>
+
+            <button id="btnRender" class="action" type="button">
+                <span class="action__label">Render / Queue in AME</span>
+                <span class="action__desc">Send every sequence in ExportBin to Adobe Media Encoder.</span>
+            </button>
+        </main>
+
+        <section class="status" aria-live="polite">
+            <div class="status__bar">
+                <span id="statusText" class="status__text">Ready.</span>
+                <button id="btnClearLog" class="status__clear" type="button" title="Clear log">Clear</button>
+            </div>
+            <pre id="log" class="log"></pre>
+        </section>
+    </div>
+
+    <script src="js/CSInterface.js"></script>
+    <script src="js/main.js"></script>
+</body>
+</html>
