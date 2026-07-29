@@ -56,3 +56,4 @@ function up_countResult(ok, count, message, logArr) {
 #include "markClips.jsx"
 #include "renderUnscripted.jsx"
 #include "loudness.jsx"
+#include "episodeSetup.jsx"

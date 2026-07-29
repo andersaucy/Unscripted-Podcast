@@ -1,8 +1,8 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<ExtensionManifest Version="9.0" ExtensionBundleId="com.unscripted.podcast" ExtensionBundleVersion="1.0.0"
+<ExtensionManifest Version="9.0" ExtensionBundleId="com.unscripted.podcast" ExtensionBundleVersion="1.1.0"
     ExtensionBundleName="Unscripted-Podcast" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
     <ExtensionList>
-        <Extension Id="com.unscripted.podcast.panel" Version="1.0.0" />
+        <Extension Id="com.unscripted.podcast.panel" Version="1.1.0" />
     </ExtensionList>
     <ExecutionEnvironment>
         <HostList>
@@ -39,11 +39,11 @@
                     <Menu>Unscripted-Podcast</Menu>
                     <Geometry>
                         <Size>
-                            <Height>420</Height>
+                            <Height>620</Height>
                             <Width>320</Width>
                         </Size>
                         <MinSize>
-                            <Height>260</Height>
+                            <Height>420</Height>
                             <Width>240</Width>
                         </MinSize>
                         <MaxSize>

@@ -35,6 +35,7 @@ and includes the task modules loaded into Premiere's ExtendScript runtime.
 
 | Module | Responsibility |
 | --- | --- |
+| `episodeSetup.jsx` | Infer the episode media folder, mirror disk hierarchy as bins, skip duplicates, import footage, and apply recorder-specific source audio mappings. |
 | `markClips.jsx` | Parse timestamps, create markers, clone templates, assemble clip sequences, and add transitions. |
 | `loudness.jsx` | Enumerate audio clips and apply calculated gain through clip Volume components. |
 | `renderUnscripted.jsx` | Discover export sequences and queue configured Adobe Media Encoder jobs. |
@@ -92,6 +93,29 @@ flowchart TD
     Transitions --> ExportBin["Move results to ExportBin"]
 ```
 
+## Episode setup workflow
+
+```mermaid
+flowchart TD
+    Project["Saved .prproj"] --> Projects["Find ancestor containing Projects"]
+    Projects --> Footage["Resolve sibling Assets/Footage"]
+    Footage --> Scan["Recursively scan files and folders"]
+    Scan --> Existing["Collect normalized project media paths"]
+    Existing --> Import{"Already imported?"}
+    Import -- Yes --> Skip["Skip duplicate"]
+    Import -- No --> Mirror["Create matching Footage sub-bin"]
+    Mirror --> Add["Import file"]
+    Add --> Type{"Media type"}
+    Type -- MXF --> MXF["Mono · embedded channel 1"]
+    Type -- WAV --> WAV["3 mono clips · embedded 5, 6, 7"]
+    Type -- Other --> Done["Keep importer defaults"]
+```
+
+Premiere's ExtendScript API does not support creating a new multicamera source
+sequence. The panel therefore prepares a deterministic `Footage` hierarchy and
+leaves the supported **Clip → Create Multi-Camera Source Sequence** operation
+to the editor.
+
 ## Design constraints
 
 - CEP and ExtendScript are legacy Adobe technologies, but they expose host
@@ -101,6 +125,8 @@ flowchart TD
 - FFmpeg is an external dependency and is detected at runtime.
 - Adobe Media Encoder preset paths and output destinations are configuration,
   not secrets, and use portable defaults in source control.
+- Source audio-channel interpretation relies on Premiere's legacy
+  `ProjectItem` mapping API and is isolated behind capability checks.
 
 ## Failure handling
 

@@ -34,20 +34,40 @@
         </section>
 
         <main class="actions">
-            <button id="btnMarkClips" class="action" type="button">
-                <span class="action__label">Mark Clips</span>
-                <span class="action__desc">Read PodcastClips.txt, mark the LowRes sequence, build clip sequences &amp; transitions. Uses the Clip Count above (auto from the .txt).</span>
-            </button>
+            <div class="actions__group">
+                <div class="actions__heading">Episode Setup</div>
 
-            <button id="btnNormalize" class="action" type="button">
-                <span class="action__label">Normalize Dialogue</span>
-                <span class="action__desc">Measure integrated loudness (LUFS) of dialogue clips via ffmpeg and raise any track averaging below the Threshold up toward the Target. Only boosts; never lowers.</span>
-            </button>
+                <button id="btnImportFootage" class="action action--primary" type="button">
+                    <span class="action__label">Import Footage</span>
+                    <span class="action__desc">Find Assets/Footage beside Projects, preserve its folders, skip duplicate media, and configure MXF/WAV source channels.</span>
+                </button>
 
-            <button id="btnRender" class="action" type="button">
-                <span class="action__label">Render / Queue in AME</span>
-                <span class="action__desc">Send every sequence in ExportBin to Adobe Media Encoder.</span>
-            </button>
+                <button id="btnConfigureAudio" class="action" type="button">
+                    <span class="action__label">Configure Footage Audio</span>
+                    <span class="action__desc">Reapply MXF channel 1 and WAV channels 5–7 as mono sources to media already in the Footage bin.</span>
+                </button>
+
+                <p class="actions__note">Multicam handoff: select the prepared Footage bin, then choose Clip &gt; Create Multi-Camera Source Sequence. Use timecode when the cameras and recorder were jam-synced; otherwise use audio.</p>
+            </div>
+
+            <div class="actions__group">
+                <div class="actions__heading">Editing &amp; Export</div>
+
+                <button id="btnMarkClips" class="action" type="button">
+                    <span class="action__label">Mark Clips</span>
+                    <span class="action__desc">Read PodcastClips.txt, mark the LowRes sequence, build clip sequences &amp; transitions. Uses the Clip Count above (auto from the .txt).</span>
+                </button>
+
+                <button id="btnNormalize" class="action" type="button">
+                    <span class="action__label">Normalize Dialogue</span>
+                    <span class="action__desc">Measure integrated loudness (LUFS) of dialogue clips via ffmpeg and raise any track averaging below the Threshold up toward the Target. Only boosts; never lowers.</span>
+                </button>
+
+                <button id="btnRender" class="action" type="button">
+                    <span class="action__label">Render / Queue in AME</span>
+                    <span class="action__desc">Send every sequence in ExportBin to Adobe Media Encoder.</span>
+                </button>
+            </div>
         </main>
 
         <section class="status" aria-live="polite">
