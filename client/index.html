@@ -13,38 +13,25 @@
             <p class="app__subtitle">Podcast automation panel</p>
         </header>
 
-        <section class="config">
-            <label class="config__label" for="clipCount">Clip Count</label>
-            <input id="clipCount" class="config__input" type="number" min="0" step="1"
-                inputmode="numeric" placeholder="auto" />
-            <button id="btnDetect" class="config__btn" type="button"
-                title="Read the clip count from PodcastClips.txt">Detect from .txt</button>
-        </section>
-
-        <section class="config config--loudness">
-            <label class="config__label" for="threshold">Threshold</label>
-            <input id="threshold" class="config__input config__input--wide" type="number"
-                step="0.5" inputmode="decimal" value="-23" title="LUFS below which a track gets boosted" />
-            <label class="config__label" for="target">Target</label>
-            <input id="target" class="config__input config__input--wide" type="number"
-                step="0.5" inputmode="decimal" value="-20" title="LUFS to raise quiet tracks toward" />
-            <label class="config__check" title="Only analyze clips currently selected in the timeline">
-                <input id="selectedOnly" type="checkbox" /> Selected only
-            </label>
-        </section>
-
         <main class="actions">
             <div class="actions__group">
                 <div class="actions__heading">Episode Setup</div>
 
                 <button id="btnImportFootage" class="action action--primary" type="button">
                     <span class="action__label">Import Footage</span>
-                    <span class="action__desc">Find Assets/Footage beside Projects, preserve its folders, skip duplicate media, and configure MXF/WAV source channels.</span>
+                    <span class="action__desc">Find 01_Assets/Footage beside 00_Projects, preserve its folders, skip duplicate media, and configure MXF/WAV source channels.</span>
                 </button>
 
                 <button id="btnConfigureAudio" class="action" type="button">
                     <span class="action__label">Configure Footage Audio</span>
-                    <span class="action__desc">Reapply MXF channel 1 and WAV channels 5–7 as mono sources to media already in the Footage bin.</span>
+                    <span class="action__desc">Batch-apply Unscripted-MXF1 to MXF files and Unscripted-WAV3 to WAV files in the Footage bin.</span>
+                </button>
+
+                <p class="actions__note">macOS: the first preset run may ask for permission to control Premiere. The saved Audio Channels presets must be installed in the active Premiere profile.</p>
+
+                <button id="btnCollectEpisode" class="action" type="button">
+                    <span class="action__label">Collect &amp; Save Episode</span>
+                    <span class="action__desc">Save this project, then create a self-contained episode copy beside 01_Assets and 00_Projects with all project media and sequences.</span>
                 </button>
 
                 <p class="actions__note">Multicam handoff: select the prepared Footage bin, then choose Clip &gt; Create Multi-Camera Source Sequence. Use timecode when the cameras and recorder were jam-synced; otherwise use audio.</p>
@@ -55,12 +42,7 @@
 
                 <button id="btnMarkClips" class="action" type="button">
                     <span class="action__label">Mark Clips</span>
-                    <span class="action__desc">Read PodcastClips.txt, mark the LowRes sequence, build clip sequences &amp; transitions. Uses the Clip Count above (auto from the .txt).</span>
-                </button>
-
-                <button id="btnNormalize" class="action" type="button">
-                    <span class="action__label">Normalize Dialogue</span>
-                    <span class="action__desc">Measure integrated loudness (LUFS) of dialogue clips via ffmpeg and raise any track averaging below the Threshold up toward the Target. Only boosts; never lowers.</span>
+                    <span class="action__desc">Automatically read PodcastClips.txt, mark the LowRes sequence, and build one clip sequence per valid timestamp range.</span>
                 </button>
 
                 <button id="btnRender" class="action" type="button">

@@ -10,7 +10,7 @@
  * inserts each clip with cross-dissolve / constant-power transitions.
  */
 
-function up_markClips(overrideCount) {
+function up_markClips() {
     var __log = [];
     try {
         if (!app.project) {
@@ -120,17 +120,8 @@ function up_markClips(overrideCount) {
         }
         __log.push("Parsed " + clipTitles.length + " title(s), " + clipList.length + " clip range(s).");
 
-        // --- Decide how many CLIP sequences to build ---
-        // Default: driven entirely by the .txt (one per FROM/TO range). The
-        // panel can pass an explicit overrideCount to force a different number.
+        // --- Build one CLIP sequence per valid FROM/TO range ---
         var clipCount = clipList.length;
-        if (overrideCount !== undefined && overrideCount !== null && overrideCount !== "") {
-            var parsedCount = parseInt(overrideCount, 10);
-            if (!isNaN(parsedCount) && parsedCount > 0) {
-                clipCount = parsedCount;
-                __log.push("Clip count override from panel: " + clipCount);
-            }
-        }
         __log.push("Building " + clipCount + " CLIP sequence(s).");
 
         // --- Clone the full episode + CLIP template sequences into ExportBin ---
@@ -253,82 +244,6 @@ function up_markClips(overrideCount) {
         var where = e.line ? (" (line " + e.line + ")") : "";
         return up_result(false, "Mark Clips error: " + e.toString() + where, __log);
     }
-}
-
-/**
- * Detect how many clips PodcastClips.txt describes, without touching the
- * project. Used by the panel to pre-fill the "Clip Count" field. Looks for the
- * file next to the open .prproj only (no file dialog), so a missing file simply
- * reports ok:false and the panel falls back to manual entry.
- *
- * Returns JSON: {ok, count, message, log}.
- */
-function up_detectClipCount() {
-    var __log = [];
-    try {
-        if (!app.project) {
-            return up_countResult(false, 0, "No open Premiere project.", __log);
-        }
-
-        var projectPath = app.project.path;
-        if (!projectPath) {
-            return up_countResult(false, 0,
-                "Project not saved yet \u2014 cannot locate PodcastClips.txt.", __log);
-        }
-
-        var projectFile = new File(projectPath);
-        var filePath = projectFile.parent.fsName + "/PodcastClips.txt";
-        __log.push("Looking for timestamp file: " + filePath);
-
-        var timestampFile = new File(filePath);
-        if (!timestampFile.exists || !timestampFile.open("r")) {
-            return up_countResult(false, 0,
-                "PodcastClips.txt not found next to project.", __log);
-        }
-        var content = timestampFile.read();
-        timestampFile.close();
-
-        if (!content) {
-            return up_countResult(false, 0, "PodcastClips.txt is empty.", __log);
-        }
-
-        var count = up_countClipRanges(content);
-        __log.push("Detected " + count + " clip(s) in PodcastClips.txt.");
-        return up_countResult(true, count, "Detected " + count + " clip(s).", __log);
-
-    } catch (e) {
-        var where = e.line ? (" (line " + e.line + ")") : "";
-        return up_countResult(false, 0, "Detect error: " + e.toString() + where, __log);
-    }
-}
-
-/**
- * Count clip ranges in the timestamp file. Mirrors the FROM=/TO= pairing that
- * up_markClips() uses to build clipList, so the detected number matches the
- * number of sequences that would actually be created.
- */
-function up_countClipRanges(content) {
-    var lines = content.split("\n");
-    var count = 0;
-    var fromSeconds = null;
-    for (var i = 0; i < lines.length; i++) {
-        var line = lines[i];
-        var fromTime = (line.indexOf("FROM=") !== -1) ? up_extractTime(line, "FROM") : null;
-        var toTime = (line.indexOf("TO=") !== -1) ? up_extractTime(line, "TO") : null;
-
-        if (fromTime) {
-            fromSeconds = up_convertToAETime(fromTime);
-        } else if (toTime && fromSeconds !== null) {
-            var toSeconds = up_convertToAETime(toTime);
-            // Only count valid ranges (TO strictly after FROM), matching the
-            // ranges up_markClips() actually builds.
-            if (toSeconds > fromSeconds) {
-                count++;
-            }
-            fromSeconds = null;
-        }
-    }
-    return count;
 }
 
 // ---- Supporting types / helpers (unchanged logic) -------------------------

@@ -2,15 +2,12 @@
 
 ## Overview
 
-Unscripted-Podcast is an Adobe CEP panel with three cooperating layers:
+Unscripted-Podcast is an Adobe CEP panel with two cooperating layers:
 
 1. A browser-based panel UI.
 2. ExtendScript modules running inside Premiere Pro.
-3. A Node.js process layer used only for capabilities missing from Premiere's
-   scripting API.
-
-This division keeps project mutations in the host application while allowing
-the panel to use FFmpeg for standards-based loudness measurement.
+This division keeps project mutations in the host application and the interface
+focused on task orchestration and feedback.
 
 ## Runtime boundaries
 
@@ -25,7 +22,6 @@ Responsibilities:
 - Maintain busy, success, and failure states.
 - Call host functions through `CSInterface.evalScript`.
 - Parse structured host results.
-- Launch FFmpeg and interpret `loudnorm` output.
 - Present a timestamped diagnostic log.
 
 ### ExtendScript host
@@ -35,9 +31,10 @@ and includes the task modules loaded into Premiere's ExtendScript runtime.
 
 | Module | Responsibility |
 | --- | --- |
-| `episodeSetup.jsx` | Infer the episode media folder, mirror disk hierarchy as bins, skip duplicates, import footage, and apply recorder-specific source audio mappings. |
+| `episodeSetup.jsx` | Infer the episode media folder, mirror disk hierarchy as bins, skip duplicates, import footage, select matching Project-panel items, and apply recorder-specific source audio mappings. |
+| `applyAudioChannelPreset.applescript` | On macOS, select an exact named preset in Premiere's native Modify Clip dialog and confirm it without coordinate-based clicks. |
+| `collectEpisode.jsx` | Save the active project and use Premiere Project Manager to create a non-destructive, self-contained episode copy. |
 | `markClips.jsx` | Parse timestamps, create markers, clone templates, assemble clip sequences, and add transitions. |
-| `loudness.jsx` | Enumerate audio clips and apply calculated gain through clip Volume components. |
 | `renderUnscripted.jsx` | Discover export sequences and queue configured Adobe Media Encoder jobs. |
 
 Host entry points use the `up_` prefix and return a consistent payload:
@@ -52,32 +49,6 @@ Host entry points use the `up_` prefix and return a consistent payload:
 
 ExtendScript lacks a native JSON serializer in the targeted runtime, so
 `host/index.jsx` constructs and escapes these responses explicitly.
-
-### External analysis
-
-Premiere's scripting APIs can modify clip gain but cannot measure integrated
-loudness. The CEP client therefore invokes FFmpeg with the EBU R128 `loudnorm`
-filter.
-
-```mermaid
-sequenceDiagram
-    participant Editor
-    participant Panel
-    participant Premiere
-    participant FFmpeg
-
-    Editor->>Panel: Normalize Dialogue
-    Panel->>Premiere: up_collectDialogueClips()
-    Premiere-->>Panel: Media paths and source ranges
-    loop Each analyzable clip
-        Panel->>FFmpeg: Analyze selected source range
-        FFmpeg-->>Panel: Integrated LUFS
-    end
-    Panel->>Panel: Duration-weighted track average
-    Panel->>Premiere: up_applyTrackGain(track, dB)
-    Premiere-->>Panel: Applied/skipped summary
-    Panel-->>Editor: Final report
-```
 
 ## Timestamp workflow
 
@@ -97,8 +68,8 @@ flowchart TD
 
 ```mermaid
 flowchart TD
-    Project["Saved .prproj"] --> Projects["Find ancestor containing Projects"]
-    Projects --> Footage["Resolve sibling Assets/Footage"]
+    Project["Saved .prproj"] --> Projects["Require direct parent 00_Projects"]
+    Projects --> Footage["Resolve sibling 01_Assets/Footage"]
     Footage --> Scan["Recursively scan files and folders"]
     Scan --> Existing["Collect normalized project media paths"]
     Existing --> Import{"Already imported?"}
@@ -106,9 +77,21 @@ flowchart TD
     Import -- No --> Mirror["Create matching Footage sub-bin"]
     Mirror --> Add["Import file"]
     Add --> Type{"Media type"}
-    Type -- MXF --> MXF["Mono · embedded channel 1"]
-    Type -- WAV --> WAV["3 mono clips · embedded 5, 6, 7"]
+    Type -- MXF --> MXF["1 mono clip · embedded channel 1"]
+    Type -- WAV --> WAV["3 mono clips · embedded channels 5, 6, 7"]
     Type -- Other --> Done["Keep importer defaults"]
+```
+
+## Episode collection workflow
+
+```mermaid
+flowchart TD
+    Project["Saved .prproj"] --> Root["Resolve episode folder from parent 00_Projects"]
+    Root --> Save["Save active project"]
+    Save --> Name["Create unique Collected - Project Name folder"]
+    Name --> Manager["Premiere Project Manager · copy all media and sequences"]
+    Manager --> Copy["Self-contained project copy"]
+    Copy --> Original["Keep active project unchanged and open"]
 ```
 
 Premiere's ExtendScript API does not support creating a new multicamera source
@@ -122,11 +105,15 @@ to the editor.
   capabilities that were required when this tool was built.
 - QE DOM is used only for transitions. QE is undocumented, so calls are isolated
   in the clip-building task.
-- FFmpeg is an external dependency and is detected at runtime.
 - Adobe Media Encoder preset paths and output destinations are configuration,
   not secrets, and use portable defaults in source control.
-- Source audio-channel interpretation relies on Premiere's legacy
-  `ProjectItem` mapping API and is isolated behind capability checks.
+- Source audio-channel interpretation first uses Premiere's legacy
+  `ProjectItem` mapping API where it is writable. Some Premiere 26.x builds
+  expose its format/count properties as read-only. On macOS, Configure Footage
+  Audio works around that regression by batch-selecting Project items, opening
+  Premiere's native Audio Channels dialog, and choosing `Unscripted-MXF1` or
+  `Unscripted-WAV3` through semantic Accessibility controls. This helper is
+  deliberately isolated and does not use screen coordinates.
 
 ## Failure handling
 
@@ -137,7 +124,6 @@ Tasks validate their prerequisites before modifying the project:
 - Parseable timestamp file.
 - Valid timestamp ranges.
 - Existing export bin and Media Encoder presets.
-- Available FFmpeg binary and analyzable audio media.
 
 The panel disables conflicting actions while a task runs and surfaces detailed
 diagnostics without relying on modal alerts.

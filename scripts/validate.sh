@@ -22,7 +22,7 @@ echo "Checking panel JavaScript..."
 node --check client/js/main.js
 
 echo "Checking ExtendScript task modules..."
-for source in host/markClips.jsx host/loudness.jsx host/renderUnscripted.jsx host/episodeSetup.jsx; do
+for source in host/markClips.jsx host/renderUnscripted.jsx host/episodeSetup.jsx host/collectEpisode.jsx; do
     target="$temp_dir/$(basename "$source" .jsx).js"
     cp "$source" "$target"
     node --check "$target"
@@ -33,8 +33,12 @@ xmllint --noout CSXS/manifest.xml
 
 echo "Checking required entry points..."
 test -f client/index.html
+test -f client/scripts/applyAudioChannelPreset.applescript
 test -f host/index.jsx
 grep -q '<MainPath>./client/index.html</MainPath>' CSXS/manifest.xml
 grep -q '<ScriptPath>./host/index.jsx</ScriptPath>' CSXS/manifest.xml
+grep -q 'Choose a preset audio channel configuration' client/scripts/applyAudioChannelPreset.applescript
+grep -q 'Unscripted-MXF1' client/js/main.js
+grep -q 'Unscripted-WAV3' client/js/main.js
 
 echo "Validation passed."

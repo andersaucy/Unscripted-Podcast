@@ -36,24 +36,9 @@ function up_result(ok, message, logArr) {
         ',"log":"' + up_escapeJSON(logStr) + '"}';
 }
 
-/**
- * Like up_result, but also carries a numeric "count" field. Used by
- * up_detectClipCount() so the panel can pre-fill the Clip Count input.
- */
-function up_countResult(ok, count, message, logArr) {
-    var logStr = "";
-    if (logArr && logArr.length) { logStr = logArr.join("\n"); }
-    var n = parseInt(count, 10);
-    if (isNaN(n)) { n = 0; }
-    return '{"ok":' + (ok ? "true" : "false") +
-        ',"count":' + n +
-        ',"message":"' + up_escapeJSON(message) + '"' +
-        ',"log":"' + up_escapeJSON(logStr) + '"}';
-}
-
 // ---- Task modules ---------------------------------------------------------
 
 #include "markClips.jsx"
 #include "renderUnscripted.jsx"
-#include "loudness.jsx"
 #include "episodeSetup.jsx"
+#include "collectEpisode.jsx"

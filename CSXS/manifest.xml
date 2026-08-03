@@ -1,8 +1,8 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<ExtensionManifest Version="9.0" ExtensionBundleId="com.unscripted.podcast" ExtensionBundleVersion="1.1.0"
+<ExtensionManifest Version="9.0" ExtensionBundleId="com.unscripted.podcast" ExtensionBundleVersion="1.2.0"
     ExtensionBundleName="Unscripted-Podcast" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
     <ExtensionList>
-        <Extension Id="com.unscripted.podcast.panel" Version="1.1.0" />
+        <Extension Id="com.unscripted.podcast.panel" Version="1.2.0" />
     </ExtensionList>
     <ExecutionEnvironment>
         <HostList>
@@ -25,10 +25,6 @@
                     <CEFCommandLine>
                         <Parameter>--allow-file-access</Parameter>
                         <Parameter>--allow-file-access-from-files</Parameter>
-                        <!-- Loudness: the panel launches ffmpeg via Node.js to measure LUFS,
-                             since neither ExtendScript nor UXP can read loudness. -->
-                        <Parameter>--enable-nodejs</Parameter>
-                        <Parameter>--mixed-context</Parameter>
                     </CEFCommandLine>
                 </Resources>
                 <Lifecycle>
@@ -39,11 +35,11 @@
                     <Menu>Unscripted-Podcast</Menu>
                     <Geometry>
                         <Size>
-                            <Height>620</Height>
+                            <Height>540</Height>
                             <Width>320</Width>
                         </Size>
                         <MinSize>
-                            <Height>420</Height>
+                            <Height>360</Height>
                             <Width>240</Width>
                         </MinSize>
                         <MaxSize>

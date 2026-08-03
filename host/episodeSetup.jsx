@@ -1,7 +1,7 @@
 /**
  * Unscripted-Podcast — episode import and source-audio setup.
  *
- * Locates Assets/Footage relative to the saved project, mirrors its directory
+ * Locates 01_Assets/Footage beside 00_Projects, mirrors its directory
  * hierarchy beneath a project bin named "Footage", skips media paths already
  * present anywhere in the project, and applies the podcast's standard source
  * audio mappings.
@@ -13,13 +13,29 @@
 
 var UP_EPISODE_SETUP = {
     footageBinName: "Footage",
-    projectsFolderToken: "projects",
-    mxfSourceChannels: [0],       // embedded channel 1
-    wavSourceChannels: [4, 5, 6]  // embedded channels 5, 6, 7
+    projectsFolderName: "00_Projects",
+    assetsFolderName: "01_Assets",
+    footageFolderName: "Footage",
+    audioProfiles: {
+        mxf: {
+            label: "MXF",
+            presetName: "Unscripted-MXF1",
+            channelType: 0,       // AUDIOCHANNELTYPE_Mono
+            audioClipCount: 1,
+            sourceChannels: [0]   // Clip 1 <- embedded channel 1
+        },
+        wav: {
+            label: "WAV",
+            presetName: "Unscripted-WAV3",
+            channelType: 0,       // AUDIOCHANNELTYPE_Mono
+            audioClipCount: 3,
+            sourceChannels: [4, 5, 6] // Clips 1-3 <- embedded channels 5-7
+        }
+    }
 };
 
 /**
- * Import Assets/Footage and immediately configure imported MXF/WAV media.
+ * Import 01_Assets/Footage and immediately configure imported MXF/WAV media.
  */
 function up_importFootage() {
     var __log = [];
@@ -59,7 +75,7 @@ function up_importFootage() {
 
         if (stats.discovered === 0) {
             return up_result(false,
-                "Assets/Footage contains no files to import.",
+                "01_Assets/Footage contains no files to import.",
                 __log);
         }
 
@@ -67,7 +83,7 @@ function up_importFootage() {
         __log.push("Import summary: " + stats.imported + " imported, " +
             stats.skipped + " already present, " + stats.failed + " failed.");
         __log.push("Audio summary: " + audio.configured + " configured, " +
-            audio.failed + " failed, " + audio.unavailable + " unsupported.");
+            audio.failed + " failed, " + audio.unavailable + " require manual setup.");
 
         var ok = (stats.failed === 0 && audio.failed === 0 &&
             audio.unavailable === 0);
@@ -75,6 +91,10 @@ function up_importFootage() {
             stats.skipped + " skipped; " + audio.configured + " audio mapping(s) applied.";
         if (!ok) {
             message += " Review the log for warnings.";
+        }
+        if (audio.unavailable > 0) {
+            message = "Footage imported, but Premiere blocked scripted audio mapping for " +
+                audio.unavailable + " clip(s). Use Modify > Audio Channels.";
         }
         return up_result(ok, message, __log);
 
@@ -108,63 +128,181 @@ function up_configureFootageAudio() {
         up_collectProjectMediaPaths(footageBin, paths);
         var audio = up_configureAudioForPaths(paths, __log);
         var ok = (audio.failed === 0 && audio.unavailable === 0);
-        return up_result(ok,
-            "Audio setup: " + audio.configured + " configured, " +
-                audio.failed + " failed, " + audio.unavailable + " unsupported.",
-            __log);
+        var message = "Audio setup: " + audio.configured + " configured, " +
+            audio.failed + " failed, " + audio.unavailable + " require manual setup.";
+        if (audio.unavailable > 0) {
+            message = "Premiere blocked scripted audio mapping for " +
+                audio.unavailable + " clip(s). Use Modify > Audio Channels.";
+        }
+        return up_result(ok, message, __log);
     } catch (e) {
         var where = e.line ? (" (line " + e.line + ")") : "";
         return up_result(false, "Configure Audio error: " + e.toString() + where, __log);
     }
 }
 
-function up_getFootageContext(log) {
+/**
+ * Select every matching source clip in the Footage bin and open Premiere's
+ * native Modify Clip > Audio Channels workflow. On macOS the panel calls this
+ * function first, then starts an accessibility helper that focuses the active
+ * Project panel, opens the dialog, chooses the named .acpreset, and confirms it.
+ *
+ * This path intentionally uses Premiere's own preset UI. It works around the
+ * Premiere 26.x regression that made AudioChannelMapping format/count fields
+ * read-only to ExtendScript.
+ */
+function up_prepareFootageAudioPreset(mediaType) {
+    var __log = [];
+    try {
+        if (!app.project) {
+            return up_result(false, "No open Premiere project.", __log);
+        }
+
+        var normalizedType = String(mediaType || "").toLowerCase();
+        var profile = UP_EPISODE_SETUP.audioProfiles[normalizedType];
+        if (!profile) {
+            return up_result(false, "Unknown footage audio type: " + mediaType, __log);
+        }
+
+        var footageBin = up_findChildBin(
+            app.project.rootItem,
+            UP_EPISODE_SETUP.footageBinName
+        );
+        if (!footageBin) {
+            return up_result(false,
+                'No project bin named "' + UP_EPISODE_SETUP.footageBinName + '" found.',
+                __log);
+        }
+
+        var items = [];
+        up_visitProjectItems(footageBin, function (item) {
+            var mediaPath = up_getProjectItemMediaPath(item);
+            if (!mediaPath) { return; }
+            var ext = up_fileExtension(mediaPath);
+            if (normalizedType === "mxf" && ext === "mxf") {
+                items.push(item);
+            } else if (normalizedType === "wav" && (ext === "wav" || ext === "wave")) {
+                items.push(item);
+            }
+        });
+
+        if (items.length === 0) {
+            return up_result(true,
+                "No " + profile.label + " files found in the Footage bin; skipped " +
+                    profile.presetName + ".",
+                __log);
+        }
+
+        if (typeof app.getProjectViewIDs !== "function" ||
+                typeof app.setProjectViewSelection !== "function") {
+            return up_result(false,
+                "This Premiere version cannot batch-select Project-panel items.",
+                __log);
+        }
+
+        var viewID = up_getActiveProjectViewID();
+        if (viewID === null || viewID === undefined) {
+            return up_result(false,
+                "Could not find the active project's Project-panel view.",
+                __log);
+        }
+
+        app.setProjectViewSelection(items, viewID);
+        __log.push("Selected " + items.length + " " + profile.label +
+            " file(s) in the Footage bin.");
+        __log.push("Applying Audio Channels preset: " + profile.presetName + ".");
+
+        return up_result(true,
+            "Prepared " + items.length + " " + profile.label +
+                " file(s) for " + profile.presetName + ".",
+            __log);
+    } catch (e) {
+        var where = e.line ? (" (line " + e.line + ")") : "";
+        return up_result(false,
+            "Audio preset dialog error: " + e.toString() + where,
+            __log);
+    }
+}
+
+function up_getActiveProjectViewID() {
+    var viewIDs = app.getProjectViewIDs();
+    if (!viewIDs || viewIDs.length === 0) { return null; }
+
+    var activePath = "";
+    try { activePath = up_normalizeMediaPath(app.project.path); } catch (e) {}
+
+    for (var i = 0; i < viewIDs.length; i++) {
+        try {
+            var project = app.getProjectFromViewID(viewIDs[i]);
+            if (project && up_normalizeMediaPath(project.path) === activePath) {
+                return viewIDs[i];
+            }
+        } catch (viewError) {}
+    }
+
+    // A normal standalone Premiere session has one Project view. Keep that
+    // common case working even if a host build does not expose project.path on
+    // the object returned by getProjectFromViewID().
+    return viewIDs.length === 1 ? viewIDs[0] : null;
+}
+
+function up_getEpisodeContext(log) {
     if (!app.project) {
         return { ok: false, message: "No open Premiere project." };
     }
     if (!app.project.path) {
         return {
             ok: false,
-            message: "Project has not been saved yet, so Assets/Footage cannot be inferred."
+            message: "Project has not been saved yet, so the episode folder cannot be inferred."
         };
     }
 
     var projectFile = new File(app.project.path);
-    var cursor = projectFile.parent;
-    var projectsFolder = null;
-    while (cursor && cursor.parent && cursor.fsName !== cursor.parent.fsName) {
-        if (String(cursor.name).toLowerCase().indexOf(
-            UP_EPISODE_SETUP.projectsFolderToken
-        ) !== -1) {
-            projectsFolder = cursor;
-            break;
-        }
-        cursor = cursor.parent;
-    }
-
-    if (!projectsFolder) {
+    var projectsFolder = projectFile.parent;
+    if (!projectsFolder || String(projectsFolder.name).toLowerCase() !==
+            UP_EPISODE_SETUP.projectsFolderName.toLowerCase()) {
         return {
             ok: false,
-            message: 'Could not find an ancestor folder whose name contains "Projects".'
+            message: 'The active project must be directly inside a folder named "' +
+                UP_EPISODE_SETUP.projectsFolderName + '".'
         };
     }
 
-    var footageFolder = new Folder(
-        projectsFolder.parent.fsName + "/Assets/Footage"
-    );
     log.push("Project: " + projectFile.fsName);
     log.push("Projects folder: " + projectsFolder.fsName);
+
+    return {
+        ok: true,
+        projectFile: projectFile,
+        projectsFolder: projectsFolder,
+        episodeFolder: projectsFolder.parent,
+        assetsFolder: new Folder(projectsFolder.parent.fsName + "/" +
+            UP_EPISODE_SETUP.assetsFolderName)
+    };
+}
+
+function up_getFootageContext(log) {
+    var context = up_getEpisodeContext(log);
+    if (!context.ok) {
+        return context;
+    }
+
+    var footageFolder = new Folder(context.assetsFolder.fsName + "/" +
+        UP_EPISODE_SETUP.footageFolderName);
     log.push("Footage folder: " + footageFolder.fsName);
 
     if (!footageFolder.exists) {
         return {
             ok: false,
-            message: "Assets/Footage was not found beside the Projects folder."
+            message: "01_Assets/Footage was not found beside 00_Projects."
         };
     }
     return {
         ok: true,
-        projectsFolder: projectsFolder,
+        projectFile: context.projectFile,
+        projectsFolder: context.projectsFolder,
+        episodeFolder: context.episodeFolder,
+        assetsFolder: context.assetsFolder,
         footageFolder: footageFolder
     };
 }
@@ -236,38 +374,53 @@ function up_importFolderTree(folder, targetBin, existingPaths, importedPaths, st
 
 function up_configureAudioForPaths(paths, log) {
     var stats = { configured: 0, failed: 0, unavailable: 0 };
+    var unavailableMessage = "";
     up_visitProjectItems(app.project.rootItem, function (item) {
         var mediaPath = up_getProjectItemMediaPath(item);
         if (!mediaPath || !paths[up_normalizeMediaPath(mediaPath)]) { return; }
 
         var ext = up_fileExtension(mediaPath);
-        var channels = null;
+        var profile = null;
         if (ext === "mxf") {
-            channels = UP_EPISODE_SETUP.mxfSourceChannels;
+            profile = UP_EPISODE_SETUP.audioProfiles.mxf;
         } else if (ext === "wav" || ext === "wave") {
-            channels = UP_EPISODE_SETUP.wavSourceChannels;
+            profile = UP_EPISODE_SETUP.audioProfiles.wav;
         } else {
             return;
         }
 
-        var outcome = up_applyAudioChannelMapping(item, channels);
+        var outcome = up_applyAudioChannelMapping(item, profile);
         if (outcome.ok) {
             stats.configured++;
-            log.push("Audio mapped " + item.name + " -> mono source channel(s) " +
-                up_oneBasedChannels(channels) + ".");
+            log.push("Audio mapped " + item.name + " -> " +
+                profile.audioClipCount + " mono clip(s), source channel(s) " +
+                up_oneBasedChannels(profile.sourceChannels) + ".");
         } else if (outcome.unavailable) {
             stats.unavailable++;
-            log.push("WARNING: " + item.name + ": " + outcome.message);
+            if (!unavailableMessage) { unavailableMessage = outcome.message; }
         } else {
             stats.failed++;
             log.push("WARNING: " + item.name + ": " + outcome.message);
         }
     });
+    if (unavailableMessage) {
+        log.push("WARNING: " + unavailableMessage);
+        log.push("Manual MXF setup: Mono, 1 audio clip, Clip 1 -> source channel 1.");
+        log.push("Manual WAV setup: Mono, 3 audio clips, Clips 1-3 -> source channels 5-7.");
+    }
     return stats;
 }
 
-function up_applyAudioChannelMapping(item, sourceChannels) {
+function up_applyAudioChannelMapping(item, profile) {
     try {
+        if (!profile || !profile.sourceChannels ||
+                profile.audioClipCount !== profile.sourceChannels.length) {
+            return {
+                ok: false,
+                unavailable: false,
+                message: "invalid audio profile configuration."
+            };
+        }
         if (!item || item.getAudioChannelMapping === undefined ||
                 typeof item.setAudioChannelMapping !== "function") {
             return {
@@ -286,15 +439,15 @@ function up_applyAudioChannelMapping(item, sourceChannels) {
             };
         }
 
-        mapping.audioChannelsType = 0; // AUDIOCHANNELTYPE_Mono
-        mapping.audioClipsNumber = sourceChannels.length;
-        for (var i = 0; i < sourceChannels.length; i++) {
-            var mapped = mapping.setMappingForChannel(i, sourceChannels[i]);
+        mapping.audioChannelsType = profile.channelType;
+        mapping.audioClipsNumber = profile.audioClipCount;
+        for (var i = 0; i < profile.sourceChannels.length; i++) {
+            var mapped = mapping.setMappingForChannel(i, profile.sourceChannels[i]);
             if (mapped === false) {
                 return {
                     ok: false,
                     unavailable: false,
-                    message: "source channel " + (sourceChannels[i] + 1) +
+                    message: "source channel " + (profile.sourceChannels[i] + 1) +
                         " is not supported by this media."
                 };
             }
@@ -308,14 +461,42 @@ function up_applyAudioChannelMapping(item, sourceChannels) {
                 message: "Premiere rejected the audio-channel mapping."
             };
         }
+
+        var verified = item.getAudioChannelMapping;
+        if (!verified || Number(verified.audioChannelsType) !== profile.channelType ||
+                Number(verified.audioClipsNumber) !== profile.audioClipCount) {
+            return {
+                ok: false,
+                unavailable: true,
+                message: up_audioMappingUnavailableMessage()
+            };
+        }
         return { ok: true, unavailable: false, message: "" };
     } catch (e) {
+        var detail = e.toString();
+        if (detail.indexOf("Cannot set property audioChannelsType") !== -1 ||
+                detail.indexOf("Cannot set property audioClipsNumber") !== -1) {
+            return {
+                ok: false,
+                unavailable: true,
+                message: up_audioMappingUnavailableMessage()
+            };
+        }
         return {
             ok: false,
             unavailable: false,
-            message: "audio mapping failed: " + e.toString()
+            message: "audio mapping failed: " + detail
         };
     }
+}
+
+function up_audioMappingUnavailableMessage() {
+    var version = "this Premiere build";
+    try {
+        if (app && app.version) { version = "Premiere " + app.version; }
+    } catch (e) {}
+    return version + " exposes audio clip format/count as read-only; " +
+        "automatic Modify > Audio Channels is unavailable.";
 }
 
 function up_visitProjectItems(item, visitor) {
