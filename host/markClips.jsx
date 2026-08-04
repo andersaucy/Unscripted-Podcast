@@ -37,7 +37,7 @@ function up_markClips(overrideCount) {
         __log.push('Using full-episode sequence: "' + fullEpisodeSeq.name + '".');
 
         // --- Read the PodcastClips.txt timestamp file ---
-        var _prompt = "Select podcast clips file (from Google Docs)";
+        var _prompt = "Select podcast clips timestamp file";
         var projectPath = app.project.path;
         var parentPath = "";
         var filePath = "";
