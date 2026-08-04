@@ -6,11 +6,76 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Added
+
+- Integrated a Google Docs chooser directly into **Mark Clips**, limited to
+  Docs viewed in the previous seven days and ranking active `PODCAST###`
+  episode-name matches first.
+- Added one-click Google Doc download, local `PodcastClips.txt` backup/write,
+  and handoff to the established Mark Clips workflow.
+- Added a deployable read-only Google Apps Script bridge with bearer-token
+  authorization, recency revalidation, response limits, and no sensitive logs.
+- Added a gitignored private configuration boundary, sanitized example config,
+  endpoint-host allowlisting, and validation that rejects tracked credentials.
+- Retained **Use Local TXT** inside the same Mark Clips chooser as an offline
+  and migration fallback.
+
+### Changed
+
+- Simplified the Episode Setup panel by moving preset-permission and sync-MP3
+  naming guidance into repository documentation.
+- Moved **Collect & Save Episode** into **Editing & Export**, where episode
+  packaging sits alongside Mark Clips and final delivery.
+
 ### Planned
 
 - Configurable folder and recorder profiles.
 - Camera-label metadata derived from filename patterns.
 - Native multicamera creation when Adobe exposes a supported API.
+
+## [1.3.0] - 2026-08-03
+
+### Added
+
+- Added one-click creation of `INTRO-###` and `TALK-###` multicamera source
+  sequences from matching media in the `Footage` bin.
+- Added flexible TALK stem detection for guest/topic names of any hyphenated
+  length, plus matching recorder WAV and unique Zencastr MOV inclusion.
+- Added CAM1-first deterministic ordering and audio track channel 1 sync.
+- Added preflight diagnostics and verification for missing CAM1, ambiguous
+  stems, offline media, duplicate sequence names, and uncertain Zencastr media.
+- Added a Zencastr sync-proxy workflow: TALK multicams prefer a matching MP3
+  named with `audio for sync` or `Zencastr`, then place the Zencastr MOV on a
+  new track at the proxy MP3's synchronized start time.
+- Made multicam creation resumable and idempotent by skipping verified existing
+  sequences and existing Zencastr sidecar placement.
+- Reduced native dialog automation to the custom sequence name and audio sync
+  channel only; all other multicam settings retain Premiere's defaults.
+- Added persistent Episode Setup badges that count imported footage and verify
+  MXF/WAV mono format and audio-clip counts from the active project.
+- Combined import and saved-preset audio configuration into one sequential
+  **Import & Configure Footage** action with both checks inside the same button.
+- Added an idempotent first setup stage that derives `PODCAST###`, writes it to
+  the numeric `Episode Number` control on the V2 AE MOGRT in `_CLIP INTRO`, and
+  opens that sequence for visual verification.
+- Added direct MOGRT-value verification and removed the unreliable
+  Premiere-native Effect Controls accessibility fallback.
+- Renamed the legacy `LowRes` sequence to `### LowRes_v1` and made Mark Clips
+  resolve the episode-aware name with a migration fallback for older projects.
+- Added a third project-derived Episode badge for the graphic and sequence name.
+- Added Premiere Project-label organization: video sources use Teal and audio
+  sources use Green, including media moved out of the Footage bin later.
+- Added an expandable activity-log view and a fixed readable default log area;
+  Episode Setup actions scroll independently in shorter panel layouts.
+- Added deterministic TALK track finishing: CAM1, Zencastr, and CAM2-CAM4 occupy
+  V1-V5; the three recorder WAV mono channels occupy A1-A3, sync MP3 A4,
+  Zencastr audio A5, and existing camera audio is preserved from A6 downward.
+- Added track-structure polling after Premiere's Add Tracks dialog so macOS
+  accessibility teardown errors cannot falsely fail a successful operation.
+- Split reliable INTRO/TALK multicam creation from optional TALK track finishing
+  so Zencastr/Add Tracks automation cannot fail the core creation action.
+- Opened both completed multicam source sequences as Timeline tabs after
+  verification, with TALK left active for editing.
 
 ## [1.2.0] - 2026-08-03
 

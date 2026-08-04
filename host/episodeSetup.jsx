@@ -4,11 +4,10 @@
  * Locates 01_Assets/Footage beside 00_Projects, mirrors its directory
  * hierarchy beneath a project bin named "Footage", skips media paths already
  * present anywhere in the project, and applies the podcast's standard source
- * audio mappings.
+ * audio mappings through the panel's subsequent preset workflow.
  *
- * Premiere's ExtendScript API cannot create a new multicamera source sequence.
- * This module therefore prepares and organizes the source clips, but leaves the
- * final "Create Multi-Camera Source Sequence" command to the editor.
+ * Premiere's ExtendScript API cannot create a new multicamera source sequence;
+ * the separate multicamSetup module coordinates that native UI workflow.
  */
 
 var UP_EPISODE_SETUP = {
@@ -16,6 +15,10 @@ var UP_EPISODE_SETUP = {
     projectsFolderName: "00_Projects",
     assetsFolderName: "01_Assets",
     footageFolderName: "Footage",
+    labelColors: {
+        video: 10, // Teal
+        audio: 13  // Green
+    },
     audioProfiles: {
         mxf: {
             label: "MXF",
@@ -35,7 +38,8 @@ var UP_EPISODE_SETUP = {
 };
 
 /**
- * Import 01_Assets/Footage and immediately configure imported MXF/WAV media.
+ * Import 01_Assets/Footage. The CEP panel applies saved MXF/WAV Audio Channels
+ * presets immediately after this function succeeds.
  */
 function up_importFootage() {
     var __log = [];
@@ -73,29 +77,20 @@ function up_importFootage() {
             __log
         );
 
+        up_colorEpisodeFootageItems(context.footageFolder, __log);
+
         if (stats.discovered === 0) {
             return up_result(false,
                 "01_Assets/Footage contains no files to import.",
                 __log);
         }
 
-        var audio = up_configureAudioForPaths(importedPaths, __log);
         __log.push("Import summary: " + stats.imported + " imported, " +
             stats.skipped + " already present, " + stats.failed + " failed.");
-        __log.push("Audio summary: " + audio.configured + " configured, " +
-            audio.failed + " failed, " + audio.unavailable + " require manual setup.");
-
-        var ok = (stats.failed === 0 && audio.failed === 0 &&
-            audio.unavailable === 0);
-        var message = "Footage setup complete: " + stats.imported + " imported, " +
-            stats.skipped + " skipped; " + audio.configured + " audio mapping(s) applied.";
-        if (!ok) {
-            message += " Review the log for warnings.";
-        }
-        if (audio.unavailable > 0) {
-            message = "Footage imported, but Premiere blocked scripted audio mapping for " +
-                audio.unavailable + " clip(s). Use Modify > Audio Channels.";
-        }
+        var ok = stats.failed === 0;
+        var message = "Footage import complete: " + stats.imported + " imported, " +
+            stats.skipped + " already present.";
+        if (!ok) { message += " Review the log for import warnings."; }
         return up_result(ok, message, __log);
 
     } catch (e) {
@@ -127,6 +122,7 @@ function up_configureFootageAudio() {
         var paths = {};
         up_collectProjectMediaPaths(footageBin, paths);
         var audio = up_configureAudioForPaths(paths, __log);
+        up_colorFootageItems(footageBin, __log);
         var ok = (audio.failed === 0 && audio.unavailable === 0);
         var message = "Audio setup: " + audio.configured + " configured, " +
             audio.failed + " failed, " + audio.unavailable + " require manual setup.";
@@ -139,6 +135,194 @@ function up_configureFootageAudio() {
         var where = e.line ? (" (line " + e.line + ")") : "";
         return up_result(false, "Configure Audio error: " + e.toString() + where, __log);
     }
+}
+
+/**
+ * Return persistent, project-derived setup indicators for the CEP panel.
+ * Media is matched by its 01_Assets/Footage source path, so the indicator
+ * remains correct if Premiere later moves clips into Processed Clips.
+ */
+function up_getEpisodeSetupStatus() {
+    var status = {
+        ok: true,
+        message: "",
+        imported: false,
+        importedCount: 0,
+        videoCount: 0,
+        audioCount: 0,
+        audioTargetCount: 0,
+        audioConfiguredCount: 0,
+        audioConfigured: false,
+        identityConfigured: false,
+        identityEpisodeNumber: "",
+        identityGraphicConfigured: false,
+        identityLowResConfigured: false
+    };
+    try {
+        var context = up_getFootageContext([]);
+        if (!context.ok) {
+            status.ok = false;
+            status.message = context.message;
+            return up_setupStatusJSON(status);
+        }
+
+        var footageRoot = up_normalizeMediaPath(context.footageFolder.fsName);
+        if (footageRoot.charAt(footageRoot.length - 1) !== "/") {
+            footageRoot += "/";
+        }
+        up_visitProjectItems(app.project.rootItem, function (item) {
+            var mediaPath = up_getProjectItemMediaPath(item);
+            if (!mediaPath) { return; }
+            var normalizedPath = up_normalizeMediaPath(mediaPath);
+            if (normalizedPath.indexOf(footageRoot) !== 0) { return; }
+
+            var ext = up_fileExtension(mediaPath);
+            status.importedCount++;
+            if (up_isFootageVideoExtension(ext)) { status.videoCount++; }
+            if (up_isFootageAudioExtension(ext)) { status.audioCount++; }
+
+            var profile = null;
+            if (ext === "mxf") {
+                profile = UP_EPISODE_SETUP.audioProfiles.mxf;
+            } else if (ext === "wav" || ext === "wave") {
+                profile = UP_EPISODE_SETUP.audioProfiles.wav;
+            }
+            if (!profile) { return; }
+
+            status.audioTargetCount++;
+            try {
+                var mapping = item.getAudioChannelMapping;
+                if (mapping &&
+                        Number(mapping.audioChannelsType) === profile.channelType &&
+                        Number(mapping.audioClipsNumber) === profile.audioClipCount) {
+                    status.audioConfiguredCount++;
+                }
+            } catch (mappingError) {}
+        });
+
+        status.imported = status.importedCount > 0;
+        status.audioConfigured = status.audioTargetCount > 0 &&
+            status.audioConfiguredCount === status.audioTargetCount;
+        if (typeof up_getEpisodeIdentityState === "function") {
+            var identity = up_getEpisodeIdentityState();
+            status.identityEpisodeNumber = identity.episodeNumber;
+            status.identityGraphicConfigured = identity.graphicConfigured;
+            status.identityLowResConfigured = identity.lowResConfigured;
+            status.identityConfigured = identity.graphicConfigured &&
+                identity.lowResConfigured;
+        }
+        status.message = status.imported ?
+            status.importedCount + " footage file(s) imported." :
+            "No footage from 01_Assets/Footage is present in the project.";
+        return up_setupStatusJSON(status);
+    } catch (e) {
+        status.ok = false;
+        status.message = "Episode setup status error: " + e.toString();
+        return up_setupStatusJSON(status);
+    }
+}
+
+function up_setupStatusJSON(status) {
+    return '{"ok":' + (status.ok ? "true" : "false") +
+        ',"message":"' + up_escapeJSON(status.message) + '"' +
+        ',"imported":' + (status.imported ? "true" : "false") +
+        ',"importedCount":' + Number(status.importedCount || 0) +
+        ',"videoCount":' + Number(status.videoCount || 0) +
+        ',"audioCount":' + Number(status.audioCount || 0) +
+        ',"audioTargetCount":' + Number(status.audioTargetCount || 0) +
+        ',"audioConfiguredCount":' + Number(status.audioConfiguredCount || 0) +
+        ',"audioConfigured":' + (status.audioConfigured ? "true" : "false") +
+        ',"identityConfigured":' + (status.identityConfigured ? "true" : "false") +
+        ',"identityEpisodeNumber":"' + up_escapeJSON(status.identityEpisodeNumber) + '"' +
+        ',"identityGraphicConfigured":' +
+            (status.identityGraphicConfigured ? "true" : "false") +
+        ',"identityLowResConfigured":' +
+            (status.identityLowResConfigured ? "true" : "false") +
+        '}';
+}
+
+/** Apply Premiere label colors to every atomic media item in Footage. */
+function up_applyFootageColorLabels() {
+    var __log = [];
+    try {
+        if (!app.project) {
+            return up_result(false, "No open Premiere project.", __log);
+        }
+        var context = up_getFootageContext(__log);
+        if (!context.ok) {
+            return up_result(false, context.message, __log);
+        }
+        var stats = up_colorEpisodeFootageItems(context.footageFolder, __log);
+        return up_result(stats.failed === 0,
+            "Footage labels: " + stats.video + " teal video, " +
+                stats.audio + " green audio.",
+            __log);
+    } catch (e) {
+        return up_result(false,
+            "Footage label error: " + e.toString(),
+            __log);
+    }
+}
+
+function up_colorEpisodeFootageItems(footageFolder, log) {
+    var rootPath = up_normalizeMediaPath(footageFolder.fsName);
+    if (rootPath.charAt(rootPath.length - 1) !== "/") { rootPath += "/"; }
+    return up_colorFootageItems(app.project.rootItem, log, rootPath);
+}
+
+function up_colorFootageItems(footageBin, log, requiredPathPrefix) {
+    var stats = { video: 0, audio: 0, failed: 0 };
+    up_visitProjectItems(footageBin, function (item) {
+        var mediaPath = up_getProjectItemMediaPath(item);
+        if (!mediaPath) { return; }
+        if (requiredPathPrefix &&
+                up_normalizeMediaPath(mediaPath).indexOf(requiredPathPrefix) !== 0) {
+            return;
+        }
+        var ext = up_fileExtension(mediaPath);
+        var labelIndex = null;
+        var type = "";
+        if (up_isFootageVideoExtension(ext)) {
+            labelIndex = UP_EPISODE_SETUP.labelColors.video;
+            type = "video";
+        } else if (up_isFootageAudioExtension(ext)) {
+            labelIndex = UP_EPISODE_SETUP.labelColors.audio;
+            type = "audio";
+        }
+        if (labelIndex === null) { return; }
+        if (typeof item.setColorLabel !== "function") {
+            stats.failed++;
+            return;
+        }
+        try {
+            var result = item.setColorLabel(labelIndex);
+            if (result === 0 || result === undefined) {
+                stats[type]++;
+            } else {
+                stats.failed++;
+            }
+        } catch (e) {
+            stats.failed++;
+        }
+    });
+    if (stats.video || stats.audio) {
+        log.push("Labels: " + stats.video + " video file(s) teal, " +
+            stats.audio + " audio file(s) green.");
+    }
+    if (stats.failed) {
+        log.push("WARNING: Premiere did not label " + stats.failed + " footage item(s).");
+    }
+    return stats;
+}
+
+function up_isFootageVideoExtension(ext) {
+    return ext === "mxf" || ext === "mov" || ext === "mp4" ||
+        ext === "m4v" || ext === "avi";
+}
+
+function up_isFootageAudioExtension(ext) {
+    return ext === "wav" || ext === "wave" || ext === "mp3" ||
+        ext === "aif" || ext === "aiff";
 }
 
 /**

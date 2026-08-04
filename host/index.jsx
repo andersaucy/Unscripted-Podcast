@@ -38,7 +38,9 @@ function up_result(ok, message, logArr) {
 
 // ---- Task modules ---------------------------------------------------------
 
+#include "episodeIdentity.jsx"
 #include "markClips.jsx"
 #include "renderUnscripted.jsx"
 #include "episodeSetup.jsx"
+#include "multicamSetup.jsx"
 #include "collectEpisode.jsx"

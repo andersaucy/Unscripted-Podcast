@@ -7,7 +7,7 @@
     <link rel="stylesheet" href="css/style.css" />
 </head>
 <body>
-    <div class="app">
+    <div id="app" class="app">
         <header class="app__header">
             <h1 class="app__title">Unscripted&#8209;Podcast</h1>
             <p class="app__subtitle">Podcast automation panel</p>
@@ -18,31 +18,40 @@
                 <div class="actions__heading">Episode Setup</div>
 
                 <button id="btnImportFootage" class="action action--primary" type="button">
-                    <span class="action__label">Import Footage</span>
-                    <span class="action__desc">Find 01_Assets/Footage beside 00_Projects, preserve its folders, skip duplicate media, and configure MXF/WAV source channels.</span>
+                    <span class="action__title">
+                        <span class="action__label">Import &amp; Configure Footage</span>
+                        <span class="action__states">
+                            <span id="episodeIdentityState" class="action__state action__state--episode">Episode: checking…</span>
+                            <span id="importFootageState" class="action__state action__state--video">Import: checking…</span>
+                            <span id="configureAudioState" class="action__state action__state--audio">Audio: checking…</span>
+                        </span>
+                    </span>
+                    <span class="action__desc">First set the V2 MOGRT’s Episode Number from PODCAST### and rename LowRes to ### LowRes_v1; then import 01_Assets/Footage and configure MXF/WAV audio.</span>
                 </button>
 
-                <button id="btnConfigureAudio" class="action" type="button">
-                    <span class="action__label">Configure Footage Audio</span>
-                    <span class="action__desc">Batch-apply Unscripted-MXF1 to MXF files and Unscripted-WAV3 to WAV files in the Footage bin.</span>
+                <button id="btnCreateMulticams" class="action action--primary" type="button">
+                    <span class="action__label">Create Episode Multicams</span>
+                    <span class="action__desc">Build and verify INTRO-### and TALK-### from matching cameras, WAV recorders, and the sync MP3, then open both Timeline tabs.</span>
                 </button>
 
-                <p class="actions__note">macOS: the first preset run may ask for permission to control Premiere. The saved Audio Channels presets must be installed in the active Premiere profile.</p>
-
-                <button id="btnCollectEpisode" class="action" type="button">
-                    <span class="action__label">Collect &amp; Save Episode</span>
-                    <span class="action__desc">Save this project, then create a self-contained episode copy beside 01_Assets and 00_Projects with all project media and sequences.</span>
+                <button id="btnFinishTalk" class="action" type="button">
+                    <span class="action__label">Finish TALK Layout</span>
+                    <span class="action__desc">Separately arrange WAV P1/P2 on A1-A3, sync MP3 on A4, and place Zencastr video/audio on V2/A5.</span>
                 </button>
 
-                <p class="actions__note">Multicam handoff: select the prepared Footage bin, then choose Clip &gt; Create Multi-Camera Source Sequence. Use timecode when the cameras and recorder were jam-synced; otherwise use audio.</p>
             </div>
 
             <div class="actions__group">
                 <div class="actions__heading">Editing &amp; Export</div>
 
-                <button id="btnMarkClips" class="action" type="button">
+                <button id="btnMarkClips" class="action action--primary" type="button">
                     <span class="action__label">Mark Clips</span>
-                    <span class="action__desc">Automatically read PodcastClips.txt, mark the LowRes sequence, and build one clip sequence per valid timestamp range.</span>
+                    <span class="action__desc">Choose episode-ranked Google Docs from the last seven days or use local PodcastClips.txt, then build markers and clip sequences.</span>
+                </button>
+
+                <button id="btnCollectEpisode" class="action" type="button">
+                    <span class="action__label">Collect &amp; Save Episode</span>
+                    <span class="action__desc">Save this project, then create a self-contained episode copy beside 01_Assets and 00_Projects with all project media and sequences.</span>
                 </button>
 
                 <button id="btnRender" class="action" type="button">
@@ -55,13 +64,50 @@
         <section class="status" aria-live="polite">
             <div class="status__bar">
                 <span id="statusText" class="status__text">Ready.</span>
-                <button id="btnClearLog" class="status__clear" type="button" title="Clear log">Clear</button>
+                <span class="status__controls">
+                    <button id="btnToggleLog" class="status__clear" type="button" title="Expand activity log">Expand Log</button>
+                    <button id="btnClearLog" class="status__clear" type="button" title="Clear log">Clear</button>
+                </span>
             </div>
             <pre id="log" class="log"></pre>
         </section>
     </div>
 
+    <div id="googleDocsDialog" class="dialog" role="dialog" aria-modal="true" aria-labelledby="googleDocsTitle" hidden>
+        <div class="dialog__backdrop" data-dialog-close="true"></div>
+        <section class="dialog__panel">
+            <header class="dialog__header">
+                <div>
+                    <h2 id="googleDocsTitle" class="dialog__title">Mark Clips · Choose Notes</h2>
+                    <p class="dialog__subtitle">Google Docs viewed in the last seven days; the active project episode is ranked first. Text loads only after selection.</p>
+                </div>
+                <button id="btnCloseGoogleDocs" class="dialog__close" type="button" aria-label="Close">×</button>
+            </header>
+
+            <div class="dialog__content">
+                <div class="dialog__column">
+                    <div class="dialog__section-title">Recent documents · 7 days</div>
+                    <div id="googleDocsList" class="document-list" aria-live="polite"></div>
+                </div>
+                <div class="dialog__column dialog__column--preview">
+                    <div class="dialog__section-title">Text preview</div>
+                    <div id="googleDocsValidation" class="validation">Select a document to preview it.</div>
+                    <pre id="googleDocsPreview" class="document-preview"></pre>
+                </div>
+            </div>
+
+            <footer class="dialog__footer">
+                <button id="btnRefreshGoogleDocs" class="dialog__button" type="button">Refresh</button>
+                <button id="btnUseLocalClips" class="dialog__button" type="button">Use Local TXT</button>
+                <span class="dialog__spacer"></span>
+                <button id="btnCancelGoogleDocs" class="dialog__button" type="button">Cancel</button>
+                <button id="btnSaveGoogleDoc" class="dialog__button dialog__button--primary" type="button" disabled>Save &amp; Mark Clips</button>
+            </footer>
+        </section>
+    </div>
+
     <script src="js/CSInterface.js"></script>
+    <script src="js/googleDocs.js"></script>
     <script src="js/main.js"></script>
 </body>
 </html>

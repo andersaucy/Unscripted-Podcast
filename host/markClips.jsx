@@ -5,10 +5,36 @@
  * returns a JSON status string instead of using alert(). The editing logic
  * is preserved from the original script.
  *
- * Reads PodcastClips.txt (next to the .prproj), marks the "LowRes" sequence,
+ * Reads PodcastClips.txt (next to the .prproj), marks the episode LowRes sequence,
  * clones the full episode + "CLIP" template sequences into "ExportBin", and
  * inserts each clip with cross-dissolve / constant-power transitions.
  */
+
+/** Return the safe, exact destination used by the Google Docs importer. */
+function up_getPodcastClipsContext() {
+    if (!app.project) {
+        return up_result(false, "No open Premiere project.", []);
+    }
+    if (!app.project.path) {
+        return up_result(false,
+            "Project has not been saved yet — cannot create PodcastClips.txt.",
+            []);
+    }
+    try {
+        var projectFile = new File(app.project.path);
+        var clipsPath = projectFile.parent.fsName + "/PodcastClips.txt";
+        var episodeNumber = typeof up_currentEpisodeNumber === "function" ?
+            up_currentEpisodeNumber() : "";
+        return '{"ok":true,"message":"PodcastClips.txt destination is ready.",' +
+            '"log":"","projectPath":"' + up_escapeJSON(projectFile.fsName) + '",' +
+            '"clipsPath":"' + up_escapeJSON(clipsPath) + '",' +
+            '"episodeNumber":"' + up_escapeJSON(episodeNumber) + '"}';
+    } catch (e) {
+        return up_result(false,
+            "Could not resolve PodcastClips.txt: " + e.toString(),
+            []);
+    }
+}
 
 function up_markClips() {
     var __log = [];
@@ -20,17 +46,21 @@ function up_markClips() {
         var project = app.project;
         app.enableQE();
 
-        // --- Locate the LowRes source sequence ---
-        var fullEpisodeSeq = null;
-        for (var i = 0; i < project.sequences.length; i++) {
-            var sequence = project.sequences[i];
-            if (sequence.name === "LowRes") {
-                fullEpisodeSeq = sequence;
-            }
+        // --- Locate the episode-aware LowRes source sequence ---
+        var episodeNumber = up_currentEpisodeNumber();
+        if (!episodeNumber) {
+            return up_result(false,
+                "Could not find PODCAST followed by a three-digit episode number in the project filename.",
+                __log);
         }
+        var lowResName = up_episodeLowResName(episodeNumber);
+        var fullEpisodeSeq = up_findEpisodeLowResSequence(episodeNumber);
         if (!fullEpisodeSeq) {
-            return up_result(false, 'No sequence named "LowRes" found in this project.', __log);
+            return up_result(false,
+                'No sequence named "' + lowResName + '" or legacy "LowRes" found in this project.',
+                __log);
         }
+        __log.push('Using full-episode sequence: "' + fullEpisodeSeq.name + '".');
 
         // --- Read the PodcastClips.txt timestamp file ---
         var _prompt = "Select podcast clips file (from Google Docs)";
@@ -63,7 +93,7 @@ function up_markClips() {
             return up_result(false, "Timestamp file was empty.", __log);
         }
 
-        // --- Parse titles + FROM/TO times, drop markers on LowRes ---
+        // --- Parse titles + FROM/TO times, drop markers on the episode LowRes sequence ---
         var clipTitles = [];
         var clipList = [];
         var inMarker = null;
@@ -76,8 +106,9 @@ function up_markClips() {
         for (var p = 0; p < lines.length; p++) {
             var line = lines[p];
 
-            if (line.indexOf("TITLE= ") !== -1) {
-                clipTitle = line.split("TITLE= ")[1];
+            var titleMatch = line.match(/^\s*TITLE\s*=\s*(.+?)\s*$/i);
+            if (titleMatch) {
+                clipTitle = titleMatch[1];
                 clipTitles.push(clipTitle);
             } else if (line.indexOf("FROM=") !== -1) {
                 var fromTime = up_extractTime(line, "FROM");
@@ -130,7 +161,9 @@ function up_markClips() {
         for (var s = 0; s < project.sequences.length; s++) {
             var seq = project.sequences[s];
 
-            if (seq.name === "LowRes") {
+            if (seq === fullEpisodeSeq ||
+                    (seq.sequenceID && fullEpisodeSeq.sequenceID &&
+                        seq.sequenceID === fullEpisodeSeq.sequenceID)) {
                 for (var a = 0; a < seq.audioTracks.numTracks; a++) {
                     seq.audioTracks[a].setMute(1);
                 }
@@ -160,7 +193,9 @@ function up_markClips() {
         }
 
         if (!clonedFullSequence) {
-            return up_result(false, 'Could not clone the "LowRes" full episode sequence.', __log);
+            return up_result(false,
+                'Could not clone the "' + fullEpisodeSeq.name + '" full episode sequence.',
+                __log);
         }
 
         // --- Insert each clip into its own sequence + add transitions ---

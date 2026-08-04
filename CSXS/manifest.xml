@@ -1,8 +1,8 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<ExtensionManifest Version="9.0" ExtensionBundleId="com.unscripted.podcast" ExtensionBundleVersion="1.2.0"
+<ExtensionManifest Version="9.0" ExtensionBundleId="com.unscripted.podcast" ExtensionBundleVersion="1.3.0"
     ExtensionBundleName="Unscripted-Podcast" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
     <ExtensionList>
-        <Extension Id="com.unscripted.podcast.panel" Version="1.2.0" />
+        <Extension Id="com.unscripted.podcast.panel" Version="1.3.0" />
     </ExtensionList>
     <ExecutionEnvironment>
         <HostList>
@@ -23,6 +23,8 @@
                     <MainPath>./client/index.html</MainPath>
                     <ScriptPath>./host/index.jsx</ScriptPath>
                     <CEFCommandLine>
+                        <Parameter>--enable-nodejs</Parameter>
+                        <Parameter>--mixed-context</Parameter>
                         <Parameter>--allow-file-access</Parameter>
                         <Parameter>--allow-file-access-from-files</Parameter>
                     </CEFCommandLine>
@@ -35,11 +37,11 @@
                     <Menu>Unscripted-Podcast</Menu>
                     <Geometry>
                         <Size>
-                            <Height>540</Height>
+                            <Height>660</Height>
                             <Width>320</Width>
                         </Size>
                         <MinSize>
-                            <Height>360</Height>
+                            <Height>430</Height>
                             <Width>240</Width>
                         </MinSize>
                         <MaxSize>
