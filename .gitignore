@@ -6,7 +6,3 @@ dist/
 build/
 output/
 outputs/
-
-# Private Google Docs bridge credentials. Commit only the example file.
-config/google-docs.json
-.clasp.json

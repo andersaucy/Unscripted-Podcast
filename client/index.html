@@ -13,6 +13,14 @@
             <p class="app__subtitle">Podcast automation panel</p>
         </header>
 
+        <section class="config">
+            <label class="config__label" for="clipCount">Clip Count</label>
+            <input id="clipCount" class="config__input" type="number" min="0" step="1"
+                inputmode="numeric" placeholder="auto" />
+            <button id="btnDetect" class="config__btn" type="button"
+                title="Read the clip count from PodcastClips.txt">Detect from .txt</button>
+        </section>
+
         <main class="actions">
             <div class="actions__group">
                 <div class="actions__heading">Episode Setup</div>
@@ -44,9 +52,9 @@
             <div class="actions__group">
                 <div class="actions__heading">Editing &amp; Export</div>
 
-                <button id="btnMarkClips" class="action action--primary" type="button">
+                <button id="btnMarkClips" class="action" type="button">
                     <span class="action__label">Mark Clips</span>
-                    <span class="action__desc">Choose episode-ranked Google Docs from the last seven days or use local PodcastClips.txt, then build markers and clip sequences.</span>
+                    <span class="action__desc">Read PodcastClips.txt, mark the episode LowRes sequence, build clip sequences and transitions. Uses the Clip Count above (auto from the .txt).</span>
                 </button>
 
                 <button id="btnCollectEpisode" class="action" type="button">
@@ -73,41 +81,7 @@
         </section>
     </div>
 
-    <div id="googleDocsDialog" class="dialog" role="dialog" aria-modal="true" aria-labelledby="googleDocsTitle" hidden>
-        <div class="dialog__backdrop" data-dialog-close="true"></div>
-        <section class="dialog__panel">
-            <header class="dialog__header">
-                <div>
-                    <h2 id="googleDocsTitle" class="dialog__title">Mark Clips · Choose Notes</h2>
-                    <p class="dialog__subtitle">Google Docs viewed in the last seven days; the active project episode is ranked first. Text loads only after selection.</p>
-                </div>
-                <button id="btnCloseGoogleDocs" class="dialog__close" type="button" aria-label="Close">×</button>
-            </header>
-
-            <div class="dialog__content">
-                <div class="dialog__column">
-                    <div class="dialog__section-title">Recent documents · 7 days</div>
-                    <div id="googleDocsList" class="document-list" aria-live="polite"></div>
-                </div>
-                <div class="dialog__column dialog__column--preview">
-                    <div class="dialog__section-title">Text preview</div>
-                    <div id="googleDocsValidation" class="validation">Select a document to preview it.</div>
-                    <pre id="googleDocsPreview" class="document-preview"></pre>
-                </div>
-            </div>
-
-            <footer class="dialog__footer">
-                <button id="btnRefreshGoogleDocs" class="dialog__button" type="button">Refresh</button>
-                <button id="btnUseLocalClips" class="dialog__button" type="button">Use Local TXT</button>
-                <span class="dialog__spacer"></span>
-                <button id="btnCancelGoogleDocs" class="dialog__button" type="button">Cancel</button>
-                <button id="btnSaveGoogleDoc" class="dialog__button dialog__button--primary" type="button" disabled>Save &amp; Mark Clips</button>
-            </footer>
-        </section>
-    </div>
-
     <script src="js/CSInterface.js"></script>
-    <script src="js/googleDocs.js"></script>
     <script src="js/main.js"></script>
 </body>
 </html>

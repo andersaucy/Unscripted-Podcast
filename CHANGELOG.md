@@ -6,26 +6,14 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
-### Added
-
-- Integrated a Google Docs chooser directly into **Mark Clips**, limited to
-  Docs viewed in the previous seven days and ranking active `PODCAST###`
-  episode-name matches first.
-- Added one-click Google Doc download, local `PodcastClips.txt` backup/write,
-  and handoff to the established Mark Clips workflow.
-- Added a deployable read-only Google Apps Script bridge with bearer-token
-  authorization, recency revalidation, response limits, and no sensitive logs.
-- Added a gitignored private configuration boundary, sanitized example config,
-  endpoint-host allowlisting, and validation that rejects tracked credentials.
-- Retained **Use Local TXT** inside the same Mark Clips chooser as an offline
-  and migration fallback.
-
 ### Changed
 
 - Simplified the Episode Setup panel by moving preset-permission and sync-MP3
   naming guidance into repository documentation.
 - Moved **Collect & Save Episode** into **Editing & Export**, where episode
   packaging sits alongside Mark Clips and final delivery.
+- Restored **Mark Clips** to its local `PodcastClips.txt` workflow and removed
+  the Google Drive/Docs bridge, account authorization, and remote configuration.
 
 ### Planned
 

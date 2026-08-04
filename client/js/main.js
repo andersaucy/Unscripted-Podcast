@@ -14,23 +14,13 @@
         finishTalk: document.getElementById("btnFinishTalk"),
         collectEpisode: document.getElementById("btnCollectEpisode"),
         render: document.getElementById("btnRender"),
+        detect: document.getElementById("btnDetect"),
+        clipCount: document.getElementById("clipCount"),
         clearLog: document.getElementById("btnClearLog"),
         toggleLog: document.getElementById("btnToggleLog"),
         statusText: document.getElementById("statusText"),
-        log: document.getElementById("log"),
-        googleDocsDialog: document.getElementById("googleDocsDialog"),
-        googleDocsList: document.getElementById("googleDocsList"),
-        googleDocsValidation: document.getElementById("googleDocsValidation"),
-        googleDocsPreview: document.getElementById("googleDocsPreview"),
-        closeGoogleDocs: document.getElementById("btnCloseGoogleDocs"),
-        cancelGoogleDocs: document.getElementById("btnCancelGoogleDocs"),
-        refreshGoogleDocs: document.getElementById("btnRefreshGoogleDocs"),
-        useLocalClips: document.getElementById("btnUseLocalClips"),
-        saveGoogleDoc: document.getElementById("btnSaveGoogleDoc")
+        log: document.getElementById("log")
     };
-    var selectedGoogleDoc = null;
-    var googleDocsListRequest = 0;
-    var googleDocPreviewRequest = 0;
 
     function timestamp() {
         var d = new Date();
@@ -65,6 +55,8 @@
         els.collectEpisode.disabled = isBusy;
         els.markClips.disabled = isBusy;
         els.render.disabled = isBusy;
+        els.detect.disabled = isBusy;
+        els.clipCount.disabled = isBusy;
     }
 
     // Parse whatever evalScript hands back. The host functions return a JSON
@@ -112,186 +104,21 @@
         });
     }
 
-    function setGoogleDocsValidation(text, state) {
-        els.googleDocsValidation.textContent = text;
-        els.googleDocsValidation.className = "validation" + (state ? " is-" + state : "");
-    }
-
-    function closeGoogleDocsDialog() {
-        googleDocsListRequest++;
-        googleDocPreviewRequest++;
-        els.googleDocsDialog.hidden = true;
-        selectedGoogleDoc = null;
-        els.saveGoogleDoc.disabled = true;
-        els.googleDocsList.textContent = "";
-        els.googleDocsPreview.textContent = "";
-        setGoogleDocsValidation("Select a document to preview it.", "");
-    }
-
-    function formatDocumentDate(value) {
-        if (!value) { return "Modified date unavailable"; }
-        var date = new Date(value);
-        if (isNaN(date.getTime())) { return "Viewed " + value; }
-        return "Viewed " + date.toLocaleString();
-    }
-
-    function renderGoogleDocsList(documents) {
-        while (els.googleDocsList.firstChild) {
-            els.googleDocsList.removeChild(els.googleDocsList.firstChild);
-        }
-        if (!documents.length) {
-            var empty = document.createElement("div");
-            empty.className = "document-list__status";
-            empty.textContent = "No Google Docs viewed within the last seven days were found.";
-            els.googleDocsList.appendChild(empty);
-            return;
-        }
-
-        for (var i = 0; i < documents.length; i++) {
-            (function (doc) {
-                var button = document.createElement("button");
-                button.type = "button";
-                button.className = "document-item";
-                var name = document.createElement("span");
-                name.className = "document-item__name";
-                name.textContent = doc.name || "Untitled Google Doc";
-                var date = document.createElement("span");
-                date.className = "document-item__date";
-                date.textContent = formatDocumentDate(doc.viewedAt || doc.modifiedAt);
-                button.appendChild(name);
-                button.appendChild(date);
-                button.addEventListener("click", function () {
-                    var current = els.googleDocsList.querySelectorAll(".document-item");
-                    for (var c = 0; c < current.length; c++) {
-                        current[c].classList.remove("is-selected");
-                    }
-                    button.classList.add("is-selected");
-                    loadGoogleDocPreview(doc);
-                });
-                els.googleDocsList.appendChild(button);
-            }(documents[i]));
-        }
-    }
-
-    function loadGoogleDocPreview(doc) {
-        var requestId = ++googleDocPreviewRequest;
-        selectedGoogleDoc = null;
-        els.saveGoogleDoc.disabled = true;
-        els.googleDocsPreview.textContent = "";
-        setGoogleDocsValidation("Loading “" + (doc.name || "Google Doc") + "”\u2026", "warn");
-        var extensionPath = cs.getSystemPath(SystemPath.EXTENSION);
-        window.UPGoogleDocs.getDocument(extensionPath, doc.id, function (error, loaded) {
-            if (requestId !== googleDocPreviewRequest || els.googleDocsDialog.hidden) {
-                return;
-            }
-            if (error) {
-                setGoogleDocsValidation(error.message, "err");
-                return;
-            }
-            selectedGoogleDoc = loaded;
-            els.googleDocsPreview.textContent = loaded.text;
-            var validation = loaded.validation;
-            var summary = validation.message;
-            if (validation.warnings.length) {
-                summary += " " + validation.warnings.length + " warning(s): " +
-                    validation.warnings.slice(0, 3).join(" ");
-            }
-            setGoogleDocsValidation(
-                summary,
-                validation.ok ? (validation.warnings.length ? "warn" : "ok") : "err"
-            );
-            els.saveGoogleDoc.disabled = !validation.ok;
-        });
-    }
-
-    function refreshGoogleDocsList() {
-        if (!window.UPGoogleDocs) {
-            setGoogleDocsValidation("Google Docs integration did not load.", "err");
-            return;
-        }
-        var requestId = ++googleDocsListRequest;
-        googleDocPreviewRequest++;
-        selectedGoogleDoc = null;
-        els.saveGoogleDoc.disabled = true;
-        els.googleDocsPreview.textContent = "";
-        setGoogleDocsValidation("Select a document to preview it.", "");
-        els.googleDocsList.textContent = "Loading recent Google Docs\u2026";
-        els.googleDocsList.className = "document-list document-list__status";
-        var extensionPath = cs.getSystemPath(SystemPath.EXTENSION);
-        evalHost("up_getPodcastClipsContext()", function (context) {
-            if (requestId !== googleDocsListRequest || els.googleDocsDialog.hidden) {
-                return;
-            }
-            if (!context.ok || !context.episodeNumber) {
-                els.googleDocsList.className = "document-list";
-                els.googleDocsList.textContent = context.message ||
-                    "The active project filename does not contain PODCAST###.";
-                setGoogleDocsValidation(
-                    "Save a PODCAST### project before choosing clip notes.",
-                    "err"
-                );
-                return;
-            }
-            window.UPGoogleDocs.listDocuments(
-                extensionPath,
-                context.episodeNumber,
-                function (error, documents) {
-                    if (requestId !== googleDocsListRequest || els.googleDocsDialog.hidden) {
-                        return;
-                    }
-                    els.googleDocsList.className = "document-list";
-                    if (error) {
-                        els.googleDocsList.textContent = error.message;
-                        setGoogleDocsValidation(
-                            "Configure the private bridge using config/google-docs.example.json.",
-                            "err"
-                        );
-                        return;
-                    }
-                    renderGoogleDocsList(documents);
+    function detectClipCount(silent) {
+        evalHost("up_detectClipCount()", function (res) {
+            if (res.ok && typeof res.count === "number") {
+                els.clipCount.value = res.count;
+                setStatus("Clip count from .txt: " + res.count, "ok");
+                if (!silent) {
+                    appendLog("\u2714 Detected " + res.count +
+                        " clip(s) from PodcastClips.txt.");
                 }
-            );
+            } else if (!silent) {
+                var message = res.message || "Could not detect clip count.";
+                setStatus(message, "err");
+                appendLog("\u2716 " + message);
+            }
         });
-    }
-
-    function openGoogleDocsDialog() {
-        els.googleDocsDialog.hidden = false;
-        refreshGoogleDocsList();
-    }
-
-    function saveSelectedGoogleDocAndMark() {
-        if (!selectedGoogleDoc || !selectedGoogleDoc.validation.ok) { return; }
-        els.saveGoogleDoc.disabled = true;
-        setGoogleDocsValidation("Saving PodcastClips.txt beside the active project\u2026", "warn");
-        evalHost("up_getPodcastClipsContext()", function (context) {
-            if (!context.ok) {
-                setGoogleDocsValidation(context.message, "err");
-                els.saveGoogleDoc.disabled = false;
-                return;
-            }
-            var saved;
-            try {
-                saved = window.UPGoogleDocs.savePodcastClips(
-                    context.clipsPath,
-                    selectedGoogleDoc.text
-                );
-            } catch (error) {
-                setGoogleDocsValidation(error.message, "err");
-                els.saveGoogleDoc.disabled = false;
-                return;
-            }
-            appendLog("\u2714 Saved " + selectedGoogleDoc.name + " as PodcastClips.txt.");
-            if (saved.backupPath) {
-                appendLog("   Previous file backed up as PodcastClips.backup.txt.");
-            }
-            closeGoogleDocsDialog();
-            runTask("Marking clips from Google Docs", "up_markClips()");
-        });
-    }
-
-    function markClipsFromLocalText() {
-        closeGoogleDocsDialog();
-        runTask("Marking clips from local TXT", "up_markClips()");
     }
 
     function setSetupIndicator(element, text, state, title) {
@@ -907,21 +734,16 @@
         });
     }
 
-    els.markClips.addEventListener("click", openGoogleDocsDialog);
-    els.closeGoogleDocs.addEventListener("click", closeGoogleDocsDialog);
-    els.cancelGoogleDocs.addEventListener("click", closeGoogleDocsDialog);
-    els.refreshGoogleDocs.addEventListener("click", refreshGoogleDocsList);
-    els.useLocalClips.addEventListener("click", markClipsFromLocalText);
-    els.saveGoogleDoc.addEventListener("click", saveSelectedGoogleDocAndMark);
-    els.googleDocsDialog.addEventListener("click", function (event) {
-        if (event.target && event.target.getAttribute("data-dialog-close") === "true") {
-            closeGoogleDocsDialog();
-        }
+    els.markClips.addEventListener("click", function () {
+        var count = parseInt(els.clipCount.value, 10);
+        var call = (!isNaN(count) && count > 0) ?
+            "up_markClips(" + count + ")" : "up_markClips()";
+        runTask("Marking clips", call);
     });
-    document.addEventListener("keydown", function (event) {
-        if (event.key === "Escape" && !els.googleDocsDialog.hidden) {
-            closeGoogleDocsDialog();
-        }
+
+    els.detect.addEventListener("click", function () {
+        setStatus("Detecting clip count\u2026", "busy");
+        detectClipCount(false);
     });
 
     els.importFootage.addEventListener("click", function () {
@@ -960,5 +782,6 @@
     setStatus("Ready.");
     appendLog("Unscripted-Podcast panel loaded.");
     refreshEpisodeSetupStatus();
+    detectClipCount(true);
 
 })();

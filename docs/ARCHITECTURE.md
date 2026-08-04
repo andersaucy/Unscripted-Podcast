@@ -23,29 +23,6 @@ Responsibilities:
 - Call host functions through `CSInterface.evalScript`.
 - Parse structured host results.
 - Present a timestamped diagnostic log.
-- Use the optional Node-enabled `googleDocs.js` boundary for HTTPS requests and
-  local UTF-8 file writes; credentials never cross into ExtendScript.
-
-### Optional Google Docs bridge
-
-```mermaid
-flowchart LR
-    CEP["Mark Clips source chooser"] --> Config["Gitignored local config"]
-    CEP --> Apps["Apps Script POST endpoint"]
-    Apps --> Guard["Bearer token + 7-day recency gate"]
-    Guard --> Doc["Selected Google Doc"]
-    Doc --> Preview["Plain-text preview + range validation"]
-    Preview --> Backup["Backup existing PodcastClips.txt"]
-    Backup --> TXT["Write PodcastClips.txt"]
-    TXT --> Mark["Existing Mark Clips task"]
-```
-
-The Google-side source and example configuration are safe to publish. The real
-endpoint/token pair is loaded only from `config/google-docs.json`, which is
-ignored and rejected by repository validation if accidentally tracked. The
-Apps Script returns only Docs viewed in the previous seven days, ranks an exact
-three-digit episode match first, rechecks the selected file's recency before
-returning text, caps list/content sizes, and never logs request bodies or text.
 
 ### ExtendScript host
 
@@ -80,10 +57,7 @@ ExtendScript lacks a native JSON serializer in the targeted runtime, so
 
 ```mermaid
 flowchart TD
-    Google["Selected Google Doc"] --> Preview["Preview and validate"]
-    Preview --> File["Back up and write PodcastClips.txt"]
-    Local["Existing local TXT"] --> File
-    File --> Parse["Parse TITLE / FROM / TO"]
+    File["Local PodcastClips.txt"] --> Parse["Parse TITLE / FROM / TO"]
     Parse --> Validate{"Valid positive ranges?"}
     Validate -- No --> Warn["Log and skip invalid range"]
     Validate -- Yes --> Mark["Mark episode ### LowRes_v1 sequence"]
@@ -181,8 +155,6 @@ Tasks validate their prerequisites before modifying the project:
 - Parseable timestamp file.
 - Valid timestamp ranges.
 - Existing export bin and Media Encoder presets.
-- Valid Google Apps Script URL, private token, seven-day recent document,
-  response size, and timestamp preview before downloaded text is written.
 
 The panel disables conflicting actions while a task runs and surfaces detailed
 diagnostics without relying on modal alerts.
@@ -195,8 +167,6 @@ Repository automation performs fast static validation:
 - ExtendScript module syntax where compatible with Node's parser.
 - Manifest XML well-formedness.
 - Required entry-point presence.
-- Google Docs text parsing, endpoint allowlisting, backup behavior, and a guard
-  against tracking the private configuration.
 
 Integration validation remains manual because Premiere's DOM, QE calls, media
 decoding, and Media Encoder queueing require an installed Adobe host and sample

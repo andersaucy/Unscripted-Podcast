@@ -10,33 +10,7 @@
  * inserts each clip with cross-dissolve / constant-power transitions.
  */
 
-/** Return the safe, exact destination used by the Google Docs importer. */
-function up_getPodcastClipsContext() {
-    if (!app.project) {
-        return up_result(false, "No open Premiere project.", []);
-    }
-    if (!app.project.path) {
-        return up_result(false,
-            "Project has not been saved yet — cannot create PodcastClips.txt.",
-            []);
-    }
-    try {
-        var projectFile = new File(app.project.path);
-        var clipsPath = projectFile.parent.fsName + "/PodcastClips.txt";
-        var episodeNumber = typeof up_currentEpisodeNumber === "function" ?
-            up_currentEpisodeNumber() : "";
-        return '{"ok":true,"message":"PodcastClips.txt destination is ready.",' +
-            '"log":"","projectPath":"' + up_escapeJSON(projectFile.fsName) + '",' +
-            '"clipsPath":"' + up_escapeJSON(clipsPath) + '",' +
-            '"episodeNumber":"' + up_escapeJSON(episodeNumber) + '"}';
-    } catch (e) {
-        return up_result(false,
-            "Could not resolve PodcastClips.txt: " + e.toString(),
-            []);
-    }
-}
-
-function up_markClips() {
+function up_markClips(overrideCount) {
     var __log = [];
     try {
         if (!app.project) {
@@ -106,9 +80,8 @@ function up_markClips() {
         for (var p = 0; p < lines.length; p++) {
             var line = lines[p];
 
-            var titleMatch = line.match(/^\s*TITLE\s*=\s*(.+?)\s*$/i);
-            if (titleMatch) {
-                clipTitle = titleMatch[1];
+            if (line.indexOf("TITLE= ") !== -1) {
+                clipTitle = line.split("TITLE= ")[1];
                 clipTitles.push(clipTitle);
             } else if (line.indexOf("FROM=") !== -1) {
                 var fromTime = up_extractTime(line, "FROM");
@@ -151,8 +124,16 @@ function up_markClips() {
         }
         __log.push("Parsed " + clipTitles.length + " title(s), " + clipList.length + " clip range(s).");
 
-        // --- Build one CLIP sequence per valid FROM/TO range ---
+        // --- Preserve the established optional Clip Count override ---
         var clipCount = clipList.length;
+        if (overrideCount !== undefined && overrideCount !== null &&
+                overrideCount !== "") {
+            var parsedCount = parseInt(overrideCount, 10);
+            if (!isNaN(parsedCount) && parsedCount > 0) {
+                clipCount = parsedCount;
+                __log.push("Clip count override from panel: " + clipCount);
+            }
+        }
         __log.push("Building " + clipCount + " CLIP sequence(s).");
 
         // --- Clone the full episode + CLIP template sequences into ExportBin ---
@@ -279,6 +260,60 @@ function up_markClips() {
         var where = e.line ? (" (line " + e.line + ")") : "";
         return up_result(false, "Mark Clips error: " + e.toString() + where, __log);
     }
+}
+
+function up_detectClipCount() {
+    var __log = [];
+    try {
+        if (!app.project) {
+            return up_countResult(false, 0, "No open Premiere project.", __log);
+        }
+        var projectPath = app.project.path;
+        if (!projectPath) {
+            return up_countResult(false, 0,
+                "Project not saved yet — cannot locate PodcastClips.txt.", __log);
+        }
+        var projectFile = new File(projectPath);
+        var filePath = projectFile.parent.fsName + "/PodcastClips.txt";
+        __log.push("Looking for timestamp file: " + filePath);
+        var timestampFile = new File(filePath);
+        if (!timestampFile.exists || !timestampFile.open("r")) {
+            return up_countResult(false, 0,
+                "PodcastClips.txt not found next to project.", __log);
+        }
+        var content = timestampFile.read();
+        timestampFile.close();
+        if (!content) {
+            return up_countResult(false, 0, "PodcastClips.txt is empty.", __log);
+        }
+        var count = up_countClipRanges(content);
+        __log.push("Detected " + count + " clip(s) in PodcastClips.txt.");
+        return up_countResult(true, count, "Detected " + count + " clip(s).", __log);
+    } catch (e) {
+        var where = e.line ? (" (line " + e.line + ")") : "";
+        return up_countResult(false, 0, "Detect error: " + e.toString() + where, __log);
+    }
+}
+
+function up_countClipRanges(content) {
+    var lines = content.split("\n");
+    var count = 0;
+    var fromSeconds = null;
+    for (var i = 0; i < lines.length; i++) {
+        var line = lines[i];
+        var fromTime = line.indexOf("FROM=") !== -1 ?
+            up_extractTime(line, "FROM") : null;
+        var toTime = line.indexOf("TO=") !== -1 ?
+            up_extractTime(line, "TO") : null;
+        if (fromTime) {
+            fromSeconds = up_convertToAETime(fromTime);
+        } else if (toTime && fromSeconds !== null) {
+            var toSeconds = up_convertToAETime(toTime);
+            if (toSeconds > fromSeconds) { count++; }
+            fromSeconds = null;
+        }
+    }
+    return count;
 }
 
 // ---- Supporting types / helpers (unchanged logic) -------------------------

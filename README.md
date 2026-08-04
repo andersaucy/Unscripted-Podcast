@@ -83,18 +83,11 @@ steps into one Premiere panel while keeping editorial decisions inside Premiere.
 
 ### Timestamp-driven clip assembly
 
-- The **Mark Clips** feature optionally lists only Google Docs viewed during the previous seven days,
-  ranks names containing the active project's `PODCAST###` episode first, and
-  validates `TITLE`/`FROM`/`TO` without changing the document format.
-- Saves the selected Doc as `PodcastClips.txt`, backs up an existing local
-  file, and immediately runs the established Mark Clips workflow.
-- Keeps the Apps Script endpoint and bearer token in a gitignored local config;
-  the repository contains only a sanitized example and generic bridge source.
-- Keeps local `PodcastClips.txt` as a source option inside the same Mark Clips
-  chooser and discovers it beside the active Premiere project.
+- Discovers `PodcastClips.txt` beside the active Premiere project and prompts
+  for another local TXT file when it is missing.
 - Parses titled `FROM`/`TO` ranges.
-- Automatically uses the number of valid ranges; no manual clip count is
-  required.
+- Detects the number of valid ranges and preserves the established optional
+  Clip Count override in the panel.
 - Adds segmentation markers to the episode-aware `### LowRes_v1` sequence.
 - Clones full-episode and `CLIP` template sequences into `ExportBin`.
 - Inserts each range and applies Cross Dissolve and Constant Power transitions.
@@ -117,11 +110,8 @@ flowchart LR
     Presets["macOS helper<br/>named Audio Channels presets"]
     PPro["Premiere project<br/>Sequences · clips · markers"]
     AME["Adobe Media Encoder"]
-    Docs["Google Docs<br/>read-only clip notes"]
-    Apps["Private Apps Script bridge<br/>7-day recency gate · bearer token"]
 
     UI --> Bridge --> Host
-    UI --> Apps --> Docs
     UI --> Presets --> PPro
     Host --> PPro
     Host --> AME
@@ -144,7 +134,6 @@ flows.
 │   ├── css/style.css          Premiere-style interface
 │   └── js/
 │       ├── main.js            Panel UI orchestration
-│       ├── googleDocs.js       Private Doc chooser and safe local cache
 │       └── CSInterface.js     Adobe CEP bridge
 │   └── scripts/
 │       ├── applyAudioChannelPreset.applescript
@@ -157,10 +146,6 @@ flows.
 │   ├── collectEpisode.jsx     Premiere Project Manager collection workflow
 │   ├── markClips.jsx          Timestamp-to-sequence workflow
 │   └── renderUnscripted.jsx   Adobe Media Encoder queueing
-├── config/
-│   └── google-docs.example.json  Sanitized optional-integration template
-├── integrations/
-│   └── google-apps-script/    Deployable read-only Docs bridge
 ├── docs/ARCHITECTURE.md
 └── scripts/validate.sh
 ```
@@ -173,8 +158,6 @@ flows.
 - On macOS, the saved Premiere Audio Channels presets `Unscripted-MXF1` and
   `Unscripted-WAV3`, plus permission for Premiere Pro to control System Events.
 - Node.js and `xmllint` only for repository validation.
-- Optional Google Docs import requires a private Apps Script deployment and
-  local `config/google-docs.json`; local TXT operation requires neither.
 
 On macOS with Homebrew:
 
@@ -243,19 +226,6 @@ TITLE= A useful takeaway
 FROM= 12:40
 TO= 14:02
 ```
-
-## Optional Google Docs clip notes
-
-The **Mark Clips** window shows Google Docs viewed in the last seven days, ranks documents whose
-names contain the active project episode number first, previews only the file
-you select, validates its existing timestamp format, and saves it as
-`PodcastClips.txt`. The local TXT button remains available when Google is
-unavailable.
-
-Follow the one-time [Google Docs bridge setup](integrations/google-apps-script/README.md).
-Never commit `config/google-docs.json`, Apps Script deployment IDs, access
-tokens, production document IDs, names, or contents. Repository
-validation fails if the private config becomes tracked.
 
 ## Export configuration
 
