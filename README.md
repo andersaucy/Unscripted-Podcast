@@ -58,13 +58,35 @@ steps into one Premiere panel while keeping editorial decisions inside Premiere.
   action, so optional Zencastr placement cannot block a valid multicam result.
 - Opens both verified multicam source sequences as Timeline tabs and leaves
   `TALK-###` active when creation finishes.
+- Extends **Create Episode Multicams** to apply Lumetri Color to every video
+  TrackItem in `INTRO-###` and `TALK-###`, while skipping duplicate Lumetri
+  instances. Separate Multicam and Lumetri badges show completion coverage.
+- Automatically analyzes and applies the trusted camera-group recommendations
+  to both newly created multicams in sequence; the separate analyzer button
+  remains available for review-driven reruns.
+- Leaves Lumetri's Basic Correction **Auto** button to the editor because that
+  control is not exposed by Premiere's CEP scripting API.
+- Includes **Analyze Camera Groups** in Episode Setup: it samples one frame per
+  inferred camera, previews deterministic Basic Correction recommendations,
+  and applies those values across each group. The same workflow also remains
+  available as the standalone Smart Camera Color panel for other projects.
+- Shows a camera-color completion badge by validating analysis markers against
+  the current multicam clips, regardless of which panel performed the analysis.
 - Includes matching recorder WAVs and prefers a unique MP3 containing
-  `audio for sync` or `Zencastr` as the TALK sync proxy. After synchronization,
+  `audio for sync`, `FORSYNC`, `FOR-SYNC`, or `Zencastr` as the TALK sync
+  proxy. After synchronization,
   it places the Zencastr MOV on a new track at the MP3's exact timeline start.
+- Falls back to a unique episode/stem-matching MP3 when the proxy filename lacks
+  the usual sync keywords, while refusing ambiguous multiple-MP3 matches.
 - Falls back to direct Zencastr MOV synchronization when no proxy MP3 exists.
 - Finishes TALK as CAM1 / Zencastr / CAM2 / CAM3 / CAM4 on V1-V5, with the
-  recorder's three WAV mono channels on A1-A3, the sync MP3 on A4, Zencastr
-  audio on A5, and preserved camera audio on A6 and below.
+  recorder's three WAV mono channels on A1-A3 and Zencastr audio on A4.
+- Stores the synchronized MP3 time in an `Unscripted Zencastr Sync` sequence
+  marker, removes the now-unneeded MP3, then uses the marker for Zencastr.
+- Preserves recorder TrackItems by leaving WAV movement to the editor: P1 and P2
+  are arranged sequentially on A1-A3 without any scripted reconstruction.
+- Recognizes the completed manual layout, creates an `Unscripted WAV P2 Start`
+  marker from P1's exact end, and only then places Zencastr on V2/A4.
 - Verifies exact sequence creation, safely skips completed work, and refuses
   ambiguous stems, offline media, or uncertain Zencastr matches.
 - Saves the active project and uses Premiere Project Manager to create a

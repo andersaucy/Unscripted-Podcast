@@ -8,6 +8,49 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Changed
 
+- Integrated camera-group analysis into **Create Episode Multicams** for both
+  `INTRO-###` and `TALK-###`, automatically applying the reviewed heuristic
+  recommendations after Lumetri is ready.
+- Expanded TALK sync-proxy discovery to accept a unique episode-matching MP3
+  even when its filename omits the standard sync keywords.
+- Restored **Analyze Camera Groups** to Unscripted-Podcast while retaining the
+  reusable standalone Smart Camera Color panel.
+- Replaced the unavailable ExtendScript `JSON` global with a constrained ES3
+  payload parser, fixing `ReferenceError: JSON is undefined` during Apply.
+- Added camera/profile metadata to the review screen and blocks correction when
+  log or HDR footage still requires technical normalization.
+- Added a project-derived camera-color completion badge that reads analysis
+  markers written by either Smart Camera Color rendition.
+
+- Extended **Create Episode Multicams** to apply Lumetri Color to every video
+  clip in the INTRO and TALK source sequences after creation.
+- Added separate Multicam and Lumetri completion badges to the combined action.
+- Removed the unreliable macOS UI automation for Lumetri Basic Correction Auto;
+  Premiere does not expose that control through CEP scripting.
+- Corrected QE sequence/clip matching to target named INTRO/TALK sequences and
+  ignore timeline gaps or transitions while avoiding duplicate Lumetri effects.
+- Expanded TALK sync-proxy discovery to include MP3 filenames containing
+  `FORSYNC` or `FOR-SYNC`, in addition to the established audio-for-sync and
+  Zencastr patterns.
+- Changed **Finish TALK Layout** to recognize an editor-arranged WAV layout
+  instead of attempting unreliable scripted cross-track movement or rebuilding
+  clips from ProjectItems.
+- Added an `Unscripted WAV P2 Start` marker at P1's exact timeline end; the three
+  P2 clips are pasted together onto A1-A3 at that marker before originals move.
+- Captures/removes the sync MP3 automatically, then asks for P1/P2 sequentially
+  on A1-A3 when manual placement is still needed. A second click completes the
+  Zencastr V2/A4 layout after recognizing those intact TrackItems.
+- Added an `Unscripted Zencastr Sync` sequence marker that preserves the MP3's
+  synchronized time independently of its audio-track move.
+- Enforced WAV-first TALK finishing: P1/P2 must be verified sequentially on the
+  shared A1-A3 tracks before Zencastr can be inserted on V2/A4.
+- Simplified the final TALK layout: the sync MP3 now creates the authoritative
+  marker and is removed; no bottom audio track or retained proxy is required.
+- Clears A4 exclusively for Zencastr audio after recorder P1/P2 occupy A1-A3.
+- Matched TALK finishing tests to Premiere's real multicam source layout: sync
+  MP3 on A1, P1 channels on A2-A4, and P2 channels on A5-A7.
+- Added a project-derived multicam badge that reports whether INTRO and TALK
+  exist as 0/2, 1/2, or a completed 2/2 check.
 - Simplified the Episode Setup panel by moving preset-permission and sync-MP3
   naming guidance into repository documentation.
 - Moved **Collect & Save Episode** into **Editing & Export**, where episode
@@ -56,8 +99,7 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - Added an expandable activity-log view and a fixed readable default log area;
   Episode Setup actions scroll independently in shorter panel layouts.
 - Added deterministic TALK track finishing: CAM1, Zencastr, and CAM2-CAM4 occupy
-  V1-V5; the three recorder WAV mono channels occupy A1-A3, sync MP3 A4,
-  Zencastr audio A5, and existing camera audio is preserved from A6 downward.
+  V1-V5; subsequent releases refine the exact audio-track arrangement.
 - Added track-structure polling after Premiere's Add Tracks dialog so macOS
   accessibility teardown errors cannot falsely fail a successful operation.
 - Split reliable INTRO/TALK multicam creation from optional TALK track finishing

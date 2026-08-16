@@ -54,4 +54,6 @@ function up_countResult(ok, count, message, logArr) {
 #include "renderUnscripted.jsx"
 #include "episodeSetup.jsx"
 #include "multicamSetup.jsx"
+#include "colorSetup.jsx"
+#include "intelligentColor.jsx"
 #include "collectEpisode.jsx"

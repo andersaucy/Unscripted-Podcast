@@ -6,3 +6,6 @@ dist/
 build/
 output/
 outputs/
+python/.venv/
+python/__pycache__/
+*.pyc

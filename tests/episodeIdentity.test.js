@@ -54,8 +54,8 @@ var context = {
     },
     app: {
         project: {
-            name: "PODCAST347-DAVID-DAY-CHINA.prproj",
-            path: "/episode/00_Projects/PODCAST347-DAVID-DAY-CHINA.prproj",
+            name: "PODCAST347-GUEST-TOPIC.prproj",
+            path: "/episode/00_Projects/PODCAST347-GUEST-TOPIC.prproj",
             sequences: [clipIntro, lowRes],
             openSequence: function (sequenceID) { openedSequenceID = sequenceID; }
         }

@@ -11,6 +11,10 @@
         configureAudioState: document.getElementById("configureAudioState"),
         episodeIdentityState: document.getElementById("episodeIdentityState"),
         createMulticams: document.getElementById("btnCreateMulticams"),
+        multicamState: document.getElementById("multicamState"),
+        lumetriState: document.getElementById("lumetriState"),
+        cameraColorState: document.getElementById("cameraColorState"),
+        analyzeCameraGroups: document.getElementById("btnAnalyzeCameraGroups"),
         finishTalk: document.getElementById("btnFinishTalk"),
         collectEpisode: document.getElementById("btnCollectEpisode"),
         render: document.getElementById("btnRender"),
@@ -51,6 +55,7 @@
     function setBusy(isBusy) {
         els.importFootage.disabled = isBusy;
         els.createMulticams.disabled = isBusy;
+        els.analyzeCameraGroups.disabled = isBusy;
         els.finishTalk.disabled = isBusy;
         els.collectEpisode.disabled = isBusy;
         els.markClips.disabled = isBusy;
@@ -131,6 +136,7 @@
     function refreshEpisodeSetupStatus() {
         evalHost("up_getEpisodeSetupStatus()", function (status) {
             if (!status.ok) {
+                els.analyzeCameraGroups.classList.remove("is-complete");
                 setSetupIndicator(
                     els.importFootageState,
                     "Not ready",
@@ -146,6 +152,18 @@
                 setSetupIndicator(
                     els.episodeIdentityState,
                     "Episode pending",
+                    "pending",
+                    status.message
+                );
+                setSetupIndicator(
+                    els.multicamState,
+                    "Multicams pending",
+                    "pending",
+                    status.message
+                );
+                setSetupIndicator(
+                    els.cameraColorState,
+                    "Color pending",
                     "pending",
                     status.message
                 );
@@ -214,6 +232,67 @@
                     identityParts.length ?
                         "Still needed: " + identityParts.join(" and ") + "." :
                         "Episode number was not found in the project filename."
+                );
+            }
+
+            if (status.multicamsCreated) {
+                setSetupIndicator(
+                    els.multicamState,
+                    "Multicams \u2713 2/2",
+                    "complete",
+                    "INTRO-" + status.identityEpisodeNumber + " and TALK-" +
+                        status.identityEpisodeNumber + " exist in this project."
+                );
+            } else {
+                var missingMulticams = [];
+                if (!status.introMulticamCreated) { missingMulticams.push("INTRO"); }
+                if (!status.talkMulticamCreated) { missingMulticams.push("TALK"); }
+                setSetupIndicator(
+                    els.multicamState,
+                    "Multicams " + Number(status.multicamCount || 0) + "/2",
+                    "pending",
+                    missingMulticams.length ?
+                        "Still needed: " + missingMulticams.join(" and ") + "." :
+                        "Episode number was not found in the project filename."
+                );
+            }
+
+            if (status.lumetriConfigured) {
+                setSetupIndicator(
+                    els.lumetriState,
+                    "Lumetri \u2713 " + status.lumetriConfiguredCount + "/" +
+                        status.lumetriTargetCount,
+                    "complete",
+                    "Lumetri Color is present on every INTRO/TALK video clip."
+                );
+            } else {
+                setSetupIndicator(
+                    els.lumetriState,
+                    "Lumetri " + Number(status.lumetriConfiguredCount || 0) + "/" +
+                        Number(status.lumetriTargetCount || 0),
+                    "pending",
+                    status.multicamsCreated ?
+                        "Create Episode Multicams will apply missing Lumetri effects." :
+                        "Lumetri coverage is checked after both multicams exist."
+                );
+            }
+
+            if (status.colorAnalysisConfigured) {
+                els.analyzeCameraGroups.classList.add("is-complete");
+                setSetupIndicator(
+                    els.cameraColorState,
+                    "Color \u2713 " + status.colorAnalyzedClipCount + "/" +
+                        status.colorAnalysisTargetClipCount,
+                    "complete",
+                    "Smart Camera Color analysis is current for both multicams."
+                );
+            } else {
+                els.analyzeCameraGroups.classList.remove("is-complete");
+                setSetupIndicator(
+                    els.cameraColorState,
+                    "Color " + Number(status.colorAnalyzedSequenceCount || 0) + "/2",
+                    "pending",
+                    "Analyze and apply both multicams in the separate Smart Camera Color panel."
                 );
             }
         });
@@ -331,6 +410,14 @@
         }
     }
 
+    function helperErrorDetail(stderr, fallback) {
+        var detail = String(stderr || "").replace(/\s+/g, " ").trim();
+        if (!detail || /\.applescript:\s*$/.test(detail)) {
+            return fallback;
+        }
+        return detail;
+    }
+
     function waitForAudioPresetHelper(helper, presetName, callback, attempt) {
         var currentAttempt = attempt || 0;
         if (!helperIsRunning(helper.pid)) {
@@ -396,9 +483,15 @@
         if (!helperIsRunning(helper.pid)) {
             window.setTimeout(function () {
                 if (helper.stderr) {
+                    var fallback = sequenceName === "TALK track layout" ?
+                        "Premiere did not complete Sequence > Add Tracks. " +
+                            "Confirm the Timeline is active and retry." :
+                        "Premiere did not complete the native multicam dialog.";
                     callback({
                         ok: false,
-                        message: "Multicam helper failed: " + helper.stderr,
+                        message: (sequenceName === "TALK track layout" ?
+                            "TALK track helper failed: " : "Multicam helper failed: ") +
+                            helperErrorDetail(helper.stderr, fallback),
                         log: ""
                     });
                 } else {
@@ -514,9 +607,28 @@
             }
 
             function finalizeLayout() {
-                window.setTimeout(function () {
-                    evalHost("up_finalizeTalkMulticam()", callback);
-                }, 400);
+                function runPlacementPass(attempt) {
+                    evalHost("up_finalizeTalkMulticam()", function (pass) {
+                        var waiting = pass.ok && String(pass.message || "") ===
+                            "Waiting for Premiere to refresh TALK placements.";
+                        if (!waiting || attempt >= 5) {
+                            if (waiting) {
+                                pass.ok = false;
+                                pass.message = "Premiere did not refresh the staged " +
+                                    "TALK placements. Original WAV clips were preserved; " +
+                                    "close and reopen the TALK timeline, then retry.";
+                            }
+                            callback(pass);
+                            return;
+                        }
+                        appendLogMulti(pass.log);
+                        appendLog("   Premiere refresh pass " + (attempt + 1) + "/5…");
+                        window.setTimeout(function () {
+                            runPlacementPass(attempt + 1);
+                        }, 1200);
+                    });
+                }
+                window.setTimeout(function () { runPlacementPass(0); }, 400);
             }
 
             if (!layout.trackSetupNeeded) {
@@ -538,7 +650,7 @@
                             appendLog("   WARNING: The macOS helper reported an " +
                                 "error after Premiere created the TALK tracks.");
                         }
-                        appendLog("\u2714 Prepared V1-V5/A1-A5 tracks.");
+                        appendLog("\u2714 Prepared V1-V5; existing audio tracks retained.");
                         finalizeLayout();
                     } else {
                         callback(helperResult.ok ? rechecked : helperResult);
@@ -609,13 +721,42 @@
                         if (!opened.ok) {
                             setStatus(opened.message, "err");
                             appendLog("\u2716 " + opened.message);
-                        } else {
-                            var done = "INTRO and TALK multicams are ready and open.";
-                            appendLog("\u2714 " + opened.message);
-                            setStatus(done, "ok");
-                            appendLog("\u2714 " + done);
+                            refreshSetupStatusSoon();
+                            setBusy(false);
+                            return;
                         }
-                        setBusy(false);
+                        appendLog("\u2714 " + opened.message);
+                        setStatus("Applying Lumetri to multicam clips…", "busy");
+                        evalHost("up_applyLumetriEpisodeMulticams()", function (colored) {
+                            appendLogMulti(colored.log);
+                            if (!colored.ok) {
+                                setStatus(colored.message, "err");
+                                appendLog("\u2716 " + colored.message);
+                                refreshSetupStatusSoon();
+                                setBusy(false);
+                            } else {
+                                appendLog("\u2714 " + colored.message);
+                                setStatus("Analyzing both multicam camera groups…", "busy");
+                                window.UnscriptedIntelligentColor
+                                    .autoAnalyzeEpisodeMulticams()
+                                    .then(function (colorResult) {
+                                        var done = "INTRO and TALK multicams are ready with intelligent color.";
+                                        appendLogMulti(colorResult.log);
+                                        setStatus(done, "ok");
+                                        appendLog("\u2714 " + done);
+                                        refreshSetupStatusSoon();
+                                        window.setTimeout(refreshEpisodeSetupStatus, 1800);
+                                        setBusy(false);
+                                    }).catch(function (colorError) {
+                                        var message = "Multicams are ready, but automatic camera color failed: " +
+                                            colorError.message;
+                                        setStatus(message, "err");
+                                        appendLog("\u2716 " + message);
+                                        refreshSetupStatusSoon();
+                                        setBusy(false);
+                                    });
+                            }
+                        });
                     });
                 });
             });
@@ -781,6 +922,11 @@
 
     setStatus("Ready.");
     appendLog("Unscripted-Podcast panel loaded.");
+    try {
+        cs.addEventListener("com.smart.camera.color.applied",
+            refreshEpisodeSetupStatus);
+    } catch (colorEventError) {}
+    window.addEventListener("focus", refreshEpisodeSetupStatus);
     refreshEpisodeSetupStatus();
     detectClipCount(true);
 

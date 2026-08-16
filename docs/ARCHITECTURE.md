@@ -34,6 +34,8 @@ and includes the task modules loaded into Premiere's ExtendScript runtime.
 | `episodeIdentity.jsx` | Derive `PODCAST###`, set the numeric `Episode Number` control on the single V2 AE MOGRT in `_CLIP INTRO`, migrate `LowRes` to `### LowRes_v1`, and provide shared sequence lookup helpers. |
 | `episodeSetup.jsx` | Infer the episode media folder, mirror disk hierarchy as bins, skip duplicates, import footage, select matching Project-panel items, and apply recorder-specific source audio mappings. |
 | `multicamSetup.jsx` | Discover and validate INTRO/TALK source groups, derive the podcast number and flexible TALK stem, order CAM1 first, select sources, verify native multicam creation, and align a Zencastr MOV from its synchronized MP3 proxy. |
+| `colorSetup.jsx` | Apply Lumetri to the standard episode multicam sequences and report coverage. |
+| `intelligentColor.jsx` | Group current sequence clips, ensure Lumetri exists, apply analyzer recommendations, and record a clip-signature completion marker. |
 | `applyAudioChannelPreset.applescript` | On macOS, select an exact named preset in Premiere's native Modify Clip dialog and confirm it without coordinate-based clicks. |
 | `createEpisodeMulticam.applescript` | On macOS, configure and submit Premiere's native Create Multi-Camera Source Sequence dialog using semantic controls. |
 | `collectEpisode.jsx` | Save the active project and use Premiere Project Manager to create a non-destructive, self-contained episode copy. |
@@ -116,6 +118,15 @@ The panel deliberately exposes this post-processing as **Finish TALK Layout**,
 separate from **Create Episode Multicams**. Core multicam creation ends after
 exact sequence verification and never depends on Add Tracks or MOV placement.
 
+The embedded and standalone Smart Camera Color panels share the same analyzer
+contract. Each records successful analysis in a `Smart Camera Color Analyzed`
+sequence marker. Unscripted-Podcast compares the marker's clip signature with
+the current INTRO/TALK clips so changes invalidate stale completion state.
+
+Image analysis remains outside Premiere in the `python/` modules. The panel
+extracts representative frames asynchronously, receives versioned JSON values,
+and keeps Premiere-specific grouping and Lumetri application in CEP/ExtendScript.
+
 Before that overwrite, a semantic macOS helper uses Premiere's native Add
 Tracks dialog to insert V2 after CAM1 and reserve five new audio tracks before
 the existing audio. That native insertion shifts all camera audio safely to A6
@@ -135,7 +146,12 @@ Identity failures stop before the longer import; a successful no-op import
 - CEP and ExtendScript are legacy Adobe technologies, but they expose host
   capabilities that were required when this tool was built.
 - QE DOM is used only for transitions. QE is undocumented, so calls are isolated
-  in the clip-building task.
+  in the clip-building and Lumetri-effect insertion tasks.
+- Lumetri parameter lookup currently uses English display names because CEP does
+  not expose stable public match names for every Basic Correction control.
+- The localhost service receives filesystem paths to media chosen inside the
+  active Premiere project. It does not listen on external network interfaces or
+  upload frames.
 - Adobe Media Encoder preset paths and output destinations are configuration,
   not secrets, and use portable defaults in source control.
 - Source audio-channel interpretation first uses Premiere's legacy

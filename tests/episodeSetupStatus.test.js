@@ -79,6 +79,23 @@ context.up_getFootageContext = function () {
         footageFolder: { fsName: "/episode/01_Assets/Footage" }
     };
 };
+context.up_getEpisodeIdentityState = function () {
+    return {
+        episodeNumber: "347",
+        graphicConfigured: true,
+        lowResConfigured: true
+    };
+};
+context.up_mc_sequenceExists = function (name) {
+    return name === "INTRO-347" || name === "TALK-347";
+};
+context.up_colorEpisodeMulticamCoverage = function () {
+    return { targetCount: 8, configuredCount: 8, configured: true };
+};
+context.up_colorEpisodeAnalysisCoverage = function () {
+    return { analyzedSequenceCount: 2, analyzedClipCount: 8,
+        clipCount: 8, configured: true };
+};
 var status = JSON.parse(context.up_getEpisodeSetupStatus());
 assert.strictEqual(status.ok, true);
 assert.strictEqual(status.imported, true);
@@ -88,6 +105,22 @@ assert.strictEqual(status.audioCount, 2);
 assert.strictEqual(status.audioTargetCount, 2);
 assert.strictEqual(status.audioConfiguredCount, 2);
 assert.strictEqual(status.audioConfigured, true);
+assert.strictEqual(status.multicamCount, 2);
+assert.strictEqual(status.multicamsCreated, true);
+assert.strictEqual(status.lumetriTargetCount, 8);
+assert.strictEqual(status.lumetriConfiguredCount, 8);
+assert.strictEqual(status.lumetriConfigured, true);
+assert.strictEqual(status.colorAnalyzedSequenceCount, 2);
+assert.strictEqual(status.colorAnalyzedClipCount, 8);
+assert.strictEqual(status.colorAnalysisTargetClipCount, 8);
+assert.strictEqual(status.colorAnalysisConfigured, true);
+
+context.up_mc_sequenceExists = function (name) { return name === "INTRO-347"; };
+status = JSON.parse(context.up_getEpisodeSetupStatus());
+assert.strictEqual(status.multicamCount, 1);
+assert.strictEqual(status.introMulticamCreated, true);
+assert.strictEqual(status.talkMulticamCreated, false);
+assert.strictEqual(status.multicamsCreated, false);
 
 wav.getAudioChannelMapping.audioClipsNumber = 8;
 status = JSON.parse(context.up_getEpisodeSetupStatus());
