@@ -108,11 +108,12 @@ other dialog default. The host then verifies the exact `INTRO-###` or
 `TALK-###` sequence name.
 
 For TALK media with unreliable Zencastr MOV audio, the discovery layer prefers
-one matching MP3 containing `audio for sync` or `Zencastr`. The MOV stays out of
-the native audio-analysis pass. After the MP3 is synchronized, the host reads
-its resulting `TrackItem.start` and overwrites the MOV at that time on newly
-addressed video/audio tracks. This avoids rippling the synchronized sequence and
-is idempotent when the workflow is resumed.
+one matching sync MP3. Standard sync keywords are recognized, with a unique
+episode/stem-matching MP3 as a guarded fallback. The MOV stays out of the native
+audio-analysis pass. After the MP3 is synchronized, the host persists its
+`TrackItem.start` in a sequence marker and uses that time for optional MOV
+placement. This avoids rippling the synchronized sequence and is idempotent when
+the workflow is resumed.
 
 The panel deliberately exposes this post-processing as **Finish TALK Layout**,
 separate from **Create Episode Multicams**. Core multicam creation ends after
@@ -127,12 +128,11 @@ Image analysis remains outside Premiere in the `python/` modules. The panel
 extracts representative frames asynchronously, receives versioned JSON values,
 and keeps Premiere-specific grouping and Lumetri application in CEP/ExtendScript.
 
-Before that overwrite, a semantic macOS helper uses Premiere's native Add
-Tracks dialog to insert V2 after CAM1 and reserve five new audio tracks before
-the existing audio. That native insertion shifts all camera audio safely to A6
-and below. The host then verifies and finishes CAM1/Zencastr/CAM2/CAM3/CAM4 on
-V1-V5, the three WAV mono channels on A1-A3, sync MP3 on A4, and MOV audio on
-A5. Only duplicate WAV/MP3 instances below the reserved area are removed.
+When needed, a semantic macOS helper uses Premiere's native Add Tracks dialog to
+insert V2 after CAM1 without rebuilding source TrackItems. Finish TALK Layout
+recognizes intact recorder P1/P2 media arranged sequentially on A1-A3, removes
+the no-longer-needed sync reference after its marker is saved, and places the
+Zencastr MOV on V2 with its audio on A4. Camera media remains preserved.
 
 ## Design constraints
 

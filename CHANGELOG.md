@@ -55,8 +55,7 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   naming guidance into repository documentation.
 - Moved **Collect & Save Episode** into **Editing & Export**, where episode
   packaging sits alongside Mark Clips and final delivery.
-- Restored **Mark Clips** to its local `PodcastClips.txt` workflow and removed
-  the Google Drive/Docs bridge, account authorization, and remote configuration.
+- Restored **Mark Clips** to its established local `PodcastClips.txt` workflow.
 
 ### Planned
 
