@@ -36,6 +36,17 @@ function up_result(ok, message, logArr) {
         ',"log":"' + up_escapeJSON(logStr) + '"}';
 }
 
+function up_countResult(ok, count, message, logArr) {
+    var logStr = "";
+    if (logArr && logArr.length) { logStr = logArr.join("\n"); }
+    var number = parseInt(count, 10);
+    if (isNaN(number)) { number = 0; }
+    return '{"ok":' + (ok ? "true" : "false") +
+        ',"count":' + number +
+        ',"message":"' + up_escapeJSON(message) + '"' +
+        ',"log":"' + up_escapeJSON(logStr) + '"}';
+}
+
 // ---- Task modules ---------------------------------------------------------
 
 #include "episodeIdentity.jsx"
@@ -43,4 +54,6 @@ function up_result(ok, message, logArr) {
 #include "renderUnscripted.jsx"
 #include "episodeSetup.jsx"
 #include "multicamSetup.jsx"
+#include "colorSetup.jsx"
+#include "intelligentColor.jsx"
 #include "collectEpisode.jsx"

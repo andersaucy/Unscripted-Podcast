@@ -20,17 +20,19 @@ command -v xmllint >/dev/null 2>&1 || {
 
 echo "Checking panel JavaScript..."
 node --check client/js/main.js
-node --check client/js/googleDocs.js
+for source in client/js/auto-color/*.js; do
+    node --check "$source"
+done
 
 echo "Checking ExtendScript task modules..."
-for source in host/episodeIdentity.jsx host/markClips.jsx host/renderUnscripted.jsx host/episodeSetup.jsx host/multicamSetup.jsx host/collectEpisode.jsx; do
+for source in host/episodeIdentity.jsx host/markClips.jsx host/renderUnscripted.jsx host/episodeSetup.jsx host/multicamSetup.jsx host/colorSetup.jsx host/intelligentColor.jsx host/collectEpisode.jsx; do
     target="$temp_dir/$(basename "$source" .jsx).js"
     cp "$source" "$target"
     node --check "$target"
 done
 
-cp integrations/google-apps-script/Code.gs "$temp_dir/googleAppsScript.js"
-node --check "$temp_dir/googleAppsScript.js"
+echo "Checking Python color engine..."
+python3 -m py_compile python/*.py
 
 echo "Testing multicam discovery and Zencastr proxy placement..."
 node tests/multicamSetup.test.js
@@ -41,9 +43,11 @@ node tests/episodeSetupStatus.test.js
 echo "Testing episode graphic and LowRes identity..."
 node tests/episodeIdentity.test.js
 
-echo "Testing privacy-safe Google Docs import..."
-node tests/googleDocs.test.js
-node tests/googleAppsScript.test.js
+echo "Testing multicam Lumetri application..."
+node tests/colorSetup.test.js
+
+echo "Testing embedded intelligent camera color..."
+node tests/intelligentColor.test.js
 
 echo "Checking CEP manifest..."
 xmllint --noout CSXS/manifest.xml
@@ -54,22 +58,25 @@ test -f client/scripts/applyAudioChannelPreset.applescript
 test -f client/scripts/createEpisodeMulticam.applescript
 test -f client/scripts/prepareTalkTracks.applescript
 test -f host/index.jsx
+test -f host/colorSetup.jsx
+test -f host/intelligentColor.jsx
+test -f python/analyze_cli.py
+test -f python/metadata.py
+test -f scripts/analyze_color_frame.sh
+grep -q 'id="clipCount"' client/index.html
+grep -q 'id="btnDetect"' client/index.html
+grep -q 'function up_detectClipCount' host/markClips.jsx
+grep -q 'function up_applyLumetriEpisodeMulticams' host/colorSetup.jsx
+grep -q 'function up_intelligentColorParsePayload' host/intelligentColor.jsx
+grep -q 'autoAnalyzeEpisodeMulticams' client/js/auto-color/intelligentColor.js
+grep -q 'var sequenceKeys = \["intro", "talk"\]' client/js/auto-color/intelligentColor.js
+grep -q 'id="btnAnalyzeCameraGroups"' client/index.html
 grep -q '<MainPath>./client/index.html</MainPath>' CSXS/manifest.xml
 grep -q '<ScriptPath>./host/index.jsx</ScriptPath>' CSXS/manifest.xml
-grep -q -- '--enable-nodejs' CSXS/manifest.xml
-grep -q 'js/googleDocs.js' client/index.html
 grep -q 'Choose a preset audio channel configuration' client/scripts/applyAudioChannelPreset.applescript
 grep -q 'Unscripted-MXF1' client/js/main.js
 grep -q 'Unscripted-WAV3' client/js/main.js
 grep -q 'Create Multi-Camera Source Sequence' client/scripts/createEpisodeMulticam.applescript
 grep -q 'Add Tracks' client/scripts/prepareTalkTracks.applescript
-
-echo "Checking credential safeguards..."
-test -f config/google-docs.example.json
-test -f integrations/google-apps-script/Code.gs
-if git ls-files --error-unmatch config/google-docs.json >/dev/null 2>&1; then
-    echo "error: private config/google-docs.json must never be tracked by Git." >&2
-    exit 1
-fi
 
 echo "Validation passed."

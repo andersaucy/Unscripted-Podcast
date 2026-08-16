@@ -11,26 +11,20 @@
         configureAudioState: document.getElementById("configureAudioState"),
         episodeIdentityState: document.getElementById("episodeIdentityState"),
         createMulticams: document.getElementById("btnCreateMulticams"),
+        multicamState: document.getElementById("multicamState"),
+        lumetriState: document.getElementById("lumetriState"),
+        cameraColorState: document.getElementById("cameraColorState"),
+        analyzeCameraGroups: document.getElementById("btnAnalyzeCameraGroups"),
         finishTalk: document.getElementById("btnFinishTalk"),
         collectEpisode: document.getElementById("btnCollectEpisode"),
         render: document.getElementById("btnRender"),
+        detect: document.getElementById("btnDetect"),
+        clipCount: document.getElementById("clipCount"),
         clearLog: document.getElementById("btnClearLog"),
         toggleLog: document.getElementById("btnToggleLog"),
         statusText: document.getElementById("statusText"),
-        log: document.getElementById("log"),
-        googleDocsDialog: document.getElementById("googleDocsDialog"),
-        googleDocsList: document.getElementById("googleDocsList"),
-        googleDocsValidation: document.getElementById("googleDocsValidation"),
-        googleDocsPreview: document.getElementById("googleDocsPreview"),
-        closeGoogleDocs: document.getElementById("btnCloseGoogleDocs"),
-        cancelGoogleDocs: document.getElementById("btnCancelGoogleDocs"),
-        refreshGoogleDocs: document.getElementById("btnRefreshGoogleDocs"),
-        useLocalClips: document.getElementById("btnUseLocalClips"),
-        saveGoogleDoc: document.getElementById("btnSaveGoogleDoc")
+        log: document.getElementById("log")
     };
-    var selectedGoogleDoc = null;
-    var googleDocsListRequest = 0;
-    var googleDocPreviewRequest = 0;
 
     function timestamp() {
         var d = new Date();
@@ -61,10 +55,13 @@
     function setBusy(isBusy) {
         els.importFootage.disabled = isBusy;
         els.createMulticams.disabled = isBusy;
+        els.analyzeCameraGroups.disabled = isBusy;
         els.finishTalk.disabled = isBusy;
         els.collectEpisode.disabled = isBusy;
         els.markClips.disabled = isBusy;
         els.render.disabled = isBusy;
+        els.detect.disabled = isBusy;
+        els.clipCount.disabled = isBusy;
     }
 
     // Parse whatever evalScript hands back. The host functions return a JSON
@@ -112,186 +109,21 @@
         });
     }
 
-    function setGoogleDocsValidation(text, state) {
-        els.googleDocsValidation.textContent = text;
-        els.googleDocsValidation.className = "validation" + (state ? " is-" + state : "");
-    }
-
-    function closeGoogleDocsDialog() {
-        googleDocsListRequest++;
-        googleDocPreviewRequest++;
-        els.googleDocsDialog.hidden = true;
-        selectedGoogleDoc = null;
-        els.saveGoogleDoc.disabled = true;
-        els.googleDocsList.textContent = "";
-        els.googleDocsPreview.textContent = "";
-        setGoogleDocsValidation("Select a document to preview it.", "");
-    }
-
-    function formatDocumentDate(value) {
-        if (!value) { return "Modified date unavailable"; }
-        var date = new Date(value);
-        if (isNaN(date.getTime())) { return "Viewed " + value; }
-        return "Viewed " + date.toLocaleString();
-    }
-
-    function renderGoogleDocsList(documents) {
-        while (els.googleDocsList.firstChild) {
-            els.googleDocsList.removeChild(els.googleDocsList.firstChild);
-        }
-        if (!documents.length) {
-            var empty = document.createElement("div");
-            empty.className = "document-list__status";
-            empty.textContent = "No Google Docs viewed within the last seven days were found.";
-            els.googleDocsList.appendChild(empty);
-            return;
-        }
-
-        for (var i = 0; i < documents.length; i++) {
-            (function (doc) {
-                var button = document.createElement("button");
-                button.type = "button";
-                button.className = "document-item";
-                var name = document.createElement("span");
-                name.className = "document-item__name";
-                name.textContent = doc.name || "Untitled Google Doc";
-                var date = document.createElement("span");
-                date.className = "document-item__date";
-                date.textContent = formatDocumentDate(doc.viewedAt || doc.modifiedAt);
-                button.appendChild(name);
-                button.appendChild(date);
-                button.addEventListener("click", function () {
-                    var current = els.googleDocsList.querySelectorAll(".document-item");
-                    for (var c = 0; c < current.length; c++) {
-                        current[c].classList.remove("is-selected");
-                    }
-                    button.classList.add("is-selected");
-                    loadGoogleDocPreview(doc);
-                });
-                els.googleDocsList.appendChild(button);
-            }(documents[i]));
-        }
-    }
-
-    function loadGoogleDocPreview(doc) {
-        var requestId = ++googleDocPreviewRequest;
-        selectedGoogleDoc = null;
-        els.saveGoogleDoc.disabled = true;
-        els.googleDocsPreview.textContent = "";
-        setGoogleDocsValidation("Loading “" + (doc.name || "Google Doc") + "”\u2026", "warn");
-        var extensionPath = cs.getSystemPath(SystemPath.EXTENSION);
-        window.UPGoogleDocs.getDocument(extensionPath, doc.id, function (error, loaded) {
-            if (requestId !== googleDocPreviewRequest || els.googleDocsDialog.hidden) {
-                return;
-            }
-            if (error) {
-                setGoogleDocsValidation(error.message, "err");
-                return;
-            }
-            selectedGoogleDoc = loaded;
-            els.googleDocsPreview.textContent = loaded.text;
-            var validation = loaded.validation;
-            var summary = validation.message;
-            if (validation.warnings.length) {
-                summary += " " + validation.warnings.length + " warning(s): " +
-                    validation.warnings.slice(0, 3).join(" ");
-            }
-            setGoogleDocsValidation(
-                summary,
-                validation.ok ? (validation.warnings.length ? "warn" : "ok") : "err"
-            );
-            els.saveGoogleDoc.disabled = !validation.ok;
-        });
-    }
-
-    function refreshGoogleDocsList() {
-        if (!window.UPGoogleDocs) {
-            setGoogleDocsValidation("Google Docs integration did not load.", "err");
-            return;
-        }
-        var requestId = ++googleDocsListRequest;
-        googleDocPreviewRequest++;
-        selectedGoogleDoc = null;
-        els.saveGoogleDoc.disabled = true;
-        els.googleDocsPreview.textContent = "";
-        setGoogleDocsValidation("Select a document to preview it.", "");
-        els.googleDocsList.textContent = "Loading recent Google Docs\u2026";
-        els.googleDocsList.className = "document-list document-list__status";
-        var extensionPath = cs.getSystemPath(SystemPath.EXTENSION);
-        evalHost("up_getPodcastClipsContext()", function (context) {
-            if (requestId !== googleDocsListRequest || els.googleDocsDialog.hidden) {
-                return;
-            }
-            if (!context.ok || !context.episodeNumber) {
-                els.googleDocsList.className = "document-list";
-                els.googleDocsList.textContent = context.message ||
-                    "The active project filename does not contain PODCAST###.";
-                setGoogleDocsValidation(
-                    "Save a PODCAST### project before choosing clip notes.",
-                    "err"
-                );
-                return;
-            }
-            window.UPGoogleDocs.listDocuments(
-                extensionPath,
-                context.episodeNumber,
-                function (error, documents) {
-                    if (requestId !== googleDocsListRequest || els.googleDocsDialog.hidden) {
-                        return;
-                    }
-                    els.googleDocsList.className = "document-list";
-                    if (error) {
-                        els.googleDocsList.textContent = error.message;
-                        setGoogleDocsValidation(
-                            "Configure the private bridge using config/google-docs.example.json.",
-                            "err"
-                        );
-                        return;
-                    }
-                    renderGoogleDocsList(documents);
+    function detectClipCount(silent) {
+        evalHost("up_detectClipCount()", function (res) {
+            if (res.ok && typeof res.count === "number") {
+                els.clipCount.value = res.count;
+                setStatus("Clip count from .txt: " + res.count, "ok");
+                if (!silent) {
+                    appendLog("\u2714 Detected " + res.count +
+                        " clip(s) from PodcastClips.txt.");
                 }
-            );
+            } else if (!silent) {
+                var message = res.message || "Could not detect clip count.";
+                setStatus(message, "err");
+                appendLog("\u2716 " + message);
+            }
         });
-    }
-
-    function openGoogleDocsDialog() {
-        els.googleDocsDialog.hidden = false;
-        refreshGoogleDocsList();
-    }
-
-    function saveSelectedGoogleDocAndMark() {
-        if (!selectedGoogleDoc || !selectedGoogleDoc.validation.ok) { return; }
-        els.saveGoogleDoc.disabled = true;
-        setGoogleDocsValidation("Saving PodcastClips.txt beside the active project\u2026", "warn");
-        evalHost("up_getPodcastClipsContext()", function (context) {
-            if (!context.ok) {
-                setGoogleDocsValidation(context.message, "err");
-                els.saveGoogleDoc.disabled = false;
-                return;
-            }
-            var saved;
-            try {
-                saved = window.UPGoogleDocs.savePodcastClips(
-                    context.clipsPath,
-                    selectedGoogleDoc.text
-                );
-            } catch (error) {
-                setGoogleDocsValidation(error.message, "err");
-                els.saveGoogleDoc.disabled = false;
-                return;
-            }
-            appendLog("\u2714 Saved " + selectedGoogleDoc.name + " as PodcastClips.txt.");
-            if (saved.backupPath) {
-                appendLog("   Previous file backed up as PodcastClips.backup.txt.");
-            }
-            closeGoogleDocsDialog();
-            runTask("Marking clips from Google Docs", "up_markClips()");
-        });
-    }
-
-    function markClipsFromLocalText() {
-        closeGoogleDocsDialog();
-        runTask("Marking clips from local TXT", "up_markClips()");
     }
 
     function setSetupIndicator(element, text, state, title) {
@@ -304,6 +136,7 @@
     function refreshEpisodeSetupStatus() {
         evalHost("up_getEpisodeSetupStatus()", function (status) {
             if (!status.ok) {
+                els.analyzeCameraGroups.classList.remove("is-complete");
                 setSetupIndicator(
                     els.importFootageState,
                     "Not ready",
@@ -319,6 +152,18 @@
                 setSetupIndicator(
                     els.episodeIdentityState,
                     "Episode pending",
+                    "pending",
+                    status.message
+                );
+                setSetupIndicator(
+                    els.multicamState,
+                    "Multicams pending",
+                    "pending",
+                    status.message
+                );
+                setSetupIndicator(
+                    els.cameraColorState,
+                    "Color pending",
                     "pending",
                     status.message
                 );
@@ -387,6 +232,67 @@
                     identityParts.length ?
                         "Still needed: " + identityParts.join(" and ") + "." :
                         "Episode number was not found in the project filename."
+                );
+            }
+
+            if (status.multicamsCreated) {
+                setSetupIndicator(
+                    els.multicamState,
+                    "Multicams \u2713 2/2",
+                    "complete",
+                    "INTRO-" + status.identityEpisodeNumber + " and TALK-" +
+                        status.identityEpisodeNumber + " exist in this project."
+                );
+            } else {
+                var missingMulticams = [];
+                if (!status.introMulticamCreated) { missingMulticams.push("INTRO"); }
+                if (!status.talkMulticamCreated) { missingMulticams.push("TALK"); }
+                setSetupIndicator(
+                    els.multicamState,
+                    "Multicams " + Number(status.multicamCount || 0) + "/2",
+                    "pending",
+                    missingMulticams.length ?
+                        "Still needed: " + missingMulticams.join(" and ") + "." :
+                        "Episode number was not found in the project filename."
+                );
+            }
+
+            if (status.lumetriConfigured) {
+                setSetupIndicator(
+                    els.lumetriState,
+                    "Lumetri \u2713 " + status.lumetriConfiguredCount + "/" +
+                        status.lumetriTargetCount,
+                    "complete",
+                    "Lumetri Color is present on every INTRO/TALK video clip."
+                );
+            } else {
+                setSetupIndicator(
+                    els.lumetriState,
+                    "Lumetri " + Number(status.lumetriConfiguredCount || 0) + "/" +
+                        Number(status.lumetriTargetCount || 0),
+                    "pending",
+                    status.multicamsCreated ?
+                        "Create Episode Multicams will apply missing Lumetri effects." :
+                        "Lumetri coverage is checked after both multicams exist."
+                );
+            }
+
+            if (status.colorAnalysisConfigured) {
+                els.analyzeCameraGroups.classList.add("is-complete");
+                setSetupIndicator(
+                    els.cameraColorState,
+                    "Color \u2713 " + status.colorAnalyzedClipCount + "/" +
+                        status.colorAnalysisTargetClipCount,
+                    "complete",
+                    "Smart Camera Color analysis is current for both multicams."
+                );
+            } else {
+                els.analyzeCameraGroups.classList.remove("is-complete");
+                setSetupIndicator(
+                    els.cameraColorState,
+                    "Color " + Number(status.colorAnalyzedSequenceCount || 0) + "/2",
+                    "pending",
+                    "Analyze and apply both multicams in the separate Smart Camera Color panel."
                 );
             }
         });
@@ -504,6 +410,14 @@
         }
     }
 
+    function helperErrorDetail(stderr, fallback) {
+        var detail = String(stderr || "").replace(/\s+/g, " ").trim();
+        if (!detail || /\.applescript:\s*$/.test(detail)) {
+            return fallback;
+        }
+        return detail;
+    }
+
     function waitForAudioPresetHelper(helper, presetName, callback, attempt) {
         var currentAttempt = attempt || 0;
         if (!helperIsRunning(helper.pid)) {
@@ -569,9 +483,15 @@
         if (!helperIsRunning(helper.pid)) {
             window.setTimeout(function () {
                 if (helper.stderr) {
+                    var fallback = sequenceName === "TALK track layout" ?
+                        "Premiere did not complete Sequence > Add Tracks. " +
+                            "Confirm the Timeline is active and retry." :
+                        "Premiere did not complete the native multicam dialog.";
                     callback({
                         ok: false,
-                        message: "Multicam helper failed: " + helper.stderr,
+                        message: (sequenceName === "TALK track layout" ?
+                            "TALK track helper failed: " : "Multicam helper failed: ") +
+                            helperErrorDetail(helper.stderr, fallback),
                         log: ""
                     });
                 } else {
@@ -687,9 +607,28 @@
             }
 
             function finalizeLayout() {
-                window.setTimeout(function () {
-                    evalHost("up_finalizeTalkMulticam()", callback);
-                }, 400);
+                function runPlacementPass(attempt) {
+                    evalHost("up_finalizeTalkMulticam()", function (pass) {
+                        var waiting = pass.ok && String(pass.message || "") ===
+                            "Waiting for Premiere to refresh TALK placements.";
+                        if (!waiting || attempt >= 5) {
+                            if (waiting) {
+                                pass.ok = false;
+                                pass.message = "Premiere did not refresh the staged " +
+                                    "TALK placements. Original WAV clips were preserved; " +
+                                    "close and reopen the TALK timeline, then retry.";
+                            }
+                            callback(pass);
+                            return;
+                        }
+                        appendLogMulti(pass.log);
+                        appendLog("   Premiere refresh pass " + (attempt + 1) + "/5…");
+                        window.setTimeout(function () {
+                            runPlacementPass(attempt + 1);
+                        }, 1200);
+                    });
+                }
+                window.setTimeout(function () { runPlacementPass(0); }, 400);
             }
 
             if (!layout.trackSetupNeeded) {
@@ -711,7 +650,7 @@
                             appendLog("   WARNING: The macOS helper reported an " +
                                 "error after Premiere created the TALK tracks.");
                         }
-                        appendLog("\u2714 Prepared V1-V5/A1-A5 tracks.");
+                        appendLog("\u2714 Prepared V1-V5; existing audio tracks retained.");
                         finalizeLayout();
                     } else {
                         callback(helperResult.ok ? rechecked : helperResult);
@@ -782,13 +721,42 @@
                         if (!opened.ok) {
                             setStatus(opened.message, "err");
                             appendLog("\u2716 " + opened.message);
-                        } else {
-                            var done = "INTRO and TALK multicams are ready and open.";
-                            appendLog("\u2714 " + opened.message);
-                            setStatus(done, "ok");
-                            appendLog("\u2714 " + done);
+                            refreshSetupStatusSoon();
+                            setBusy(false);
+                            return;
                         }
-                        setBusy(false);
+                        appendLog("\u2714 " + opened.message);
+                        setStatus("Applying Lumetri to multicam clips…", "busy");
+                        evalHost("up_applyLumetriEpisodeMulticams()", function (colored) {
+                            appendLogMulti(colored.log);
+                            if (!colored.ok) {
+                                setStatus(colored.message, "err");
+                                appendLog("\u2716 " + colored.message);
+                                refreshSetupStatusSoon();
+                                setBusy(false);
+                            } else {
+                                appendLog("\u2714 " + colored.message);
+                                setStatus("Analyzing both multicam camera groups…", "busy");
+                                window.UnscriptedIntelligentColor
+                                    .autoAnalyzeEpisodeMulticams()
+                                    .then(function (colorResult) {
+                                        var done = "INTRO and TALK multicams are ready with intelligent color.";
+                                        appendLogMulti(colorResult.log);
+                                        setStatus(done, "ok");
+                                        appendLog("\u2714 " + done);
+                                        refreshSetupStatusSoon();
+                                        window.setTimeout(refreshEpisodeSetupStatus, 1800);
+                                        setBusy(false);
+                                    }).catch(function (colorError) {
+                                        var message = "Multicams are ready, but automatic camera color failed: " +
+                                            colorError.message;
+                                        setStatus(message, "err");
+                                        appendLog("\u2716 " + message);
+                                        refreshSetupStatusSoon();
+                                        setBusy(false);
+                                    });
+                            }
+                        });
                     });
                 });
             });
@@ -907,21 +875,16 @@
         });
     }
 
-    els.markClips.addEventListener("click", openGoogleDocsDialog);
-    els.closeGoogleDocs.addEventListener("click", closeGoogleDocsDialog);
-    els.cancelGoogleDocs.addEventListener("click", closeGoogleDocsDialog);
-    els.refreshGoogleDocs.addEventListener("click", refreshGoogleDocsList);
-    els.useLocalClips.addEventListener("click", markClipsFromLocalText);
-    els.saveGoogleDoc.addEventListener("click", saveSelectedGoogleDocAndMark);
-    els.googleDocsDialog.addEventListener("click", function (event) {
-        if (event.target && event.target.getAttribute("data-dialog-close") === "true") {
-            closeGoogleDocsDialog();
-        }
+    els.markClips.addEventListener("click", function () {
+        var count = parseInt(els.clipCount.value, 10);
+        var call = (!isNaN(count) && count > 0) ?
+            "up_markClips(" + count + ")" : "up_markClips()";
+        runTask("Marking clips", call);
     });
-    document.addEventListener("keydown", function (event) {
-        if (event.key === "Escape" && !els.googleDocsDialog.hidden) {
-            closeGoogleDocsDialog();
-        }
+
+    els.detect.addEventListener("click", function () {
+        setStatus("Detecting clip count\u2026", "busy");
+        detectClipCount(false);
     });
 
     els.importFootage.addEventListener("click", function () {
@@ -959,6 +922,12 @@
 
     setStatus("Ready.");
     appendLog("Unscripted-Podcast panel loaded.");
+    try {
+        cs.addEventListener("com.smart.camera.color.applied",
+            refreshEpisodeSetupStatus);
+    } catch (colorEventError) {}
+    window.addEventListener("focus", refreshEpisodeSetupStatus);
     refreshEpisodeSetupStatus();
+    detectClipCount(true);
 
 })();

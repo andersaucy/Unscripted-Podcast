@@ -9,6 +9,9 @@
 
 var UP_MULTICAM_SETUP = {
     footageBinName: "Footage",
+    zencastrSyncMarkerName: "Unscripted Zencastr Sync",
+    wavPartTwoMarkerName: "Unscripted WAV P2 Start",
+    timeToleranceSeconds: 0.05,
     supportedExtensions: {
         mxf: true,
         mov: true,
@@ -23,6 +26,191 @@ var UP_MULTICAM_SETUP = {
         mp4: true
     }
 };
+
+// Retains the original synchronized WAV project items and timing between the
+// staged placement and verification calls made by Finish TALK Layout.
+var UP_TALK_LAYOUT_SESSION = null;
+var UP_TALK_WAV_MOVE_SESSION = null;
+
+/** Select one intact WAV channel for Premiere's native vertical nudge. */
+function up_prepareTalkWavMove(partNumber, channelIndex) {
+    var __log = [];
+    try {
+        var podcastNumber = up_mc_podcastNumber(app.project.name);
+        var sequence = up_mc_findSequence("TALK-" + podcastNumber);
+        if (!sequence) {
+            return up_result(false, "TALK-" + podcastNumber + " was not found.", __log);
+        }
+        try { app.project.openSequence(sequence.sequenceID); } catch (openError) {}
+        var part = Number(partNumber);
+        if (part !== 1 && part !== 2) {
+            return up_result(false, "Unknown WAV part: " + partNumber, __log);
+        }
+        var channel = Number(channelIndex);
+        if (channel < 0 || channel > 2 || Math.floor(channel) !== channel) {
+            return up_result(false, "Unknown WAV channel index: " + channelIndex, __log);
+        }
+
+        var expectedTracks = part === 1 ? [1, 2, 3] : [4, 5, 6];
+        var sourceTrackIndex = expectedTracks[channel];
+        if (sourceTrackIndex >= sequence.audioTracks.numTracks) {
+            return up_result(false, "Expected WAV P" + part + " on A" +
+                (sourceTrackIndex + 1) + ".", __log);
+        }
+        var selectedClip = up_mc_findWavPartOnTrack(
+            sequence.audioTracks[sourceTrackIndex], part
+        );
+        if (!selectedClip) {
+            return up_result(false, "Expected WAV P" + part + " channel " +
+                (channel + 1) + " on A" + (sourceTrackIndex + 1) +
+                ". Recreate the TALK multicam before retrying.", __log);
+        }
+
+        var targetSeconds;
+        if (part === 1) {
+            if (channel === 0) {
+                var syncClips = up_mc_findSyncMp3Clips(sequence);
+                if (syncClips.length > 0) {
+                    var syncSeconds = Number(syncClips[0].start.seconds);
+                    up_mc_getOrCreateZencastrSyncMarker(sequence, syncSeconds, __log);
+                    var syncPath = up_mc_trackItemMediaPath(syncClips[0]);
+                    up_mc_removeAudioPathOutsideTrack(sequence, syncPath, -1);
+                    __log.push("Captured the sync marker and removed the MP3 reference.");
+                }
+            }
+            targetSeconds = Number(selectedClip.start.seconds);
+        } else {
+            var p1End = up_mc_originalPartEnd(sequence, 1, [0, 1, 2]);
+            if (isNaN(p1End)) {
+                return up_result(false, "Could not determine WAV P1 end time.", __log);
+            }
+            targetSeconds = p1End;
+            if (channel === 0) {
+                var partClips = [];
+                for (var e = 0; e < expectedTracks.length; e++) {
+                    var p2Clip = up_mc_findWavPartOnTrack(
+                        sequence.audioTracks[expectedTracks[e]], part
+                    );
+                    if (!p2Clip) {
+                        return up_result(false, "Expected all WAV P2 channels on " +
+                            "A5-A7 before timing them.", __log);
+                    }
+                    partClips.push(p2Clip);
+                }
+                up_mc_getOrCreateNamedMarker(
+                    sequence,
+                    UP_MULTICAM_SETUP.wavPartTwoMarkerName,
+                    p1End,
+                    "P2 begins at the intact P1 timeline end",
+                    __log
+                );
+                var shiftSeconds = targetSeconds - Number(partClips[0].start.seconds);
+                if (!up_mc_timesMatch(shiftSeconds, 0)) {
+                    var moveBy = new Time();
+                    moveBy.seconds = shiftSeconds;
+                    for (var m = 0; m < partClips.length; m++) {
+                        var moveResult = partClips[m].move(moveBy);
+                        if (moveResult !== 0) {
+                            return up_result(false, "Premiere could not move WAV P2 " +
+                                "to the P1 endpoint.", __log);
+                        }
+                    }
+                    __log.push("Moved WAV P2 horizontally to the P1 endpoint at " +
+                        targetSeconds.toFixed(3) + " seconds.");
+                }
+            } else if (!up_mc_timesMatch(
+                    Number(selectedClip.start.seconds), targetSeconds)) {
+                return up_result(false, "WAV P2 channels no longer share the same " +
+                    "timeline start.", __log);
+            }
+        }
+
+        up_mc_clearTimelineSelection(sequence);
+        selectedClip.setSelected(1, 1);
+        UP_TALK_WAV_MOVE_SESSION = {
+            sequenceID: sequence.sequenceID,
+            part: part,
+            channel: channel,
+            mediaPath: up_mc_trackItemMediaPath(selectedClip),
+            targetSeconds: targetSeconds,
+            duration: up_mc_trackItemDurationSeconds(selectedClip)
+        };
+        __log.push("Selected WAV P" + part + " channel " + (channel + 1) +
+            " on A" + (expectedTracks[channel] + 1) + ".");
+        return up_result(true, "Prepared WAV P" + part + " channel " +
+            (channel + 1) + " track move.", __log);
+    } catch (e) {
+        return up_result(false, "Prepare WAV move error: " + e.toString(), __log);
+    }
+}
+
+function up_verifyTalkWavMove(partNumber, channelIndex) {
+    var __log = [];
+    try {
+        var session = UP_TALK_WAV_MOVE_SESSION;
+        if (!session || session.part !== Number(partNumber) ||
+                session.channel !== Number(channelIndex)) {
+            return up_result(false, "No prepared WAV move session.", __log);
+        }
+        var sequence = up_mc_findSequenceByID(session.sequenceID);
+        if (!sequence) { return up_result(false, "TALK sequence was not found.", __log); }
+        var clip = up_mc_findTrackClipAtTime(
+            sequence.audioTracks[session.channel],
+            session.mediaPath,
+            session.targetSeconds
+        );
+        if (!clip || !up_mc_timesMatch(
+                up_mc_trackItemDurationSeconds(clip), session.duration)) {
+            return up_result(false, "Premiere did not move WAV P" + session.part +
+                " channel " + (session.channel + 1) + " onto A" +
+                (session.channel + 1) + ".", __log);
+        }
+        return up_result(true, "WAV P" + session.part + " channel " +
+            (session.channel + 1) + " reached A" + (session.channel + 1) + ".", __log);
+    } catch (e) {
+        return up_result(false, "Verify WAV move error: " + e.toString(), __log);
+    }
+}
+
+function up_mc_originalPartEnd(sequence, part, trackIndexes) {
+    var end = NaN;
+    for (var i = 0; i < trackIndexes.length; i++) {
+        var track = sequence.audioTracks[trackIndexes[i]];
+        for (var c = 0; c < track.clips.numItems; c++) {
+            var clip = track.clips[c];
+            if (up_mc_wavPartNumber(clip.projectItem) === part) {
+                var clipEnd = Number(clip.end.seconds);
+                if (isNaN(end) || clipEnd > end) { end = clipEnd; }
+            }
+        }
+    }
+    return end;
+}
+
+function up_mc_findWavPartOnTrack(track, part) {
+    if (!track || !track.clips) { return null; }
+    for (var c = 0; c < track.clips.numItems; c++) {
+        var candidate = track.clips[c];
+        var ext = up_fileExtension(up_mc_trackItemMediaPath(candidate));
+        if ((ext === "wav" || ext === "wave") &&
+                up_mc_wavPartNumber(candidate.projectItem) === part) {
+            return candidate;
+        }
+    }
+    return null;
+}
+
+function up_mc_clearTimelineSelection(sequence) {
+    var groups = [sequence.audioTracks, sequence.videoTracks];
+    for (var g = 0; g < groups.length; g++) {
+        for (var t = 0; t < groups[g].numTracks; t++) {
+            var clips = groups[g][t].clips;
+            for (var c = 0; c < clips.numItems; c++) {
+                try { clips[c].setSelected(0, 0); } catch (selectionError) {}
+            }
+        }
+    }
+}
 
 function up_previewEpisodeMulticams() {
     var __log = [];
@@ -255,15 +443,17 @@ function up_prepareTalkTrackLayout() {
             return up_mc_trackLayoutJSON(response);
         }
 
+        // The sync MP3 already occupies A1. Finish TALK captures its start as
+        // a marker, removes it, then reuses existing A1-A4 for WAV/Zencastr.
         response.audioAfterTrack = 0;
-        response.audioTracksToAdd = up_mc_audioFrontIsReserved(sequence) ? 0 : 5;
+        response.audioTracksToAdd = 0;
         response.trackSetupNeeded = response.videoTracksToAdd > 0 ||
             response.audioTracksToAdd > 0;
         response.ok = true;
         response.message = response.trackSetupNeeded ?
             "Preparing TALK tracks: add " + response.videoTracksToAdd +
-                " video and " + response.audioTracksToAdd + " audio." :
-            "TALK already has the required V1-V5/A1-A5 reserved structure.";
+                " video track after V1." :
+            "TALK already has the required V1-V5 video structure.";
 
         try { app.project.openSequence(sequence.sequenceID); } catch (openError) {}
         return up_mc_trackLayoutJSON(response);
@@ -451,6 +641,7 @@ function up_mc_talkItems(context) {
     var fallbackZencastr = [];
     var matchingSyncAudio = [];
     var fallbackSyncAudio = [];
+    var matchingEpisodeMp3 = [];
     for (i = 0; i < context.media.length; i++) {
         var media = context.media[i];
         if (media.normalizedName.indexOf("INTRO") !== -1) { continue; }
@@ -462,11 +653,13 @@ function up_mc_talkItems(context) {
             continue;
         }
 
-        if (media.ext === "mp3" && up_mc_isSyncAudioName(media.normalizedName)) {
-            fallbackSyncAudio.push(media);
-            if (media.normalizedName.indexOf(canonicalStem) === 0 ||
-                    media.normalizedName.indexOf(context.podcastToken) !== -1) {
-                matchingSyncAudio.push(media);
+        if (media.ext === "mp3") {
+            var episodeMp3 = media.normalizedName.indexOf(canonicalStem) === 0 ||
+                media.normalizedName.indexOf(context.podcastToken) !== -1;
+            if (episodeMp3) { matchingEpisodeMp3.push(media); }
+            if (up_mc_isSyncAudioName(media.normalizedName)) {
+                fallbackSyncAudio.push(media);
+                if (episodeMp3) { matchingSyncAudio.push(media); }
             }
             continue;
         }
@@ -496,6 +689,17 @@ function up_mc_talkItems(context) {
             ok: false,
             message: "Multiple unmatched sync MP3 files were found; include the " +
                 "PODCAST### or TALK camera stem in the intended filename."
+        };
+    } else if (matchingEpisodeMp3.length === 1) {
+        // Some recorders/users name the proxy only with the episode stem. A
+        // unique episode-matching MP3 is still safer than synchronizing the
+        // intermittently unreliable Zencastr MOV directly.
+        syncAudio = matchingEpisodeMp3[0];
+    } else if (matchingEpisodeMp3.length > 1) {
+        return {
+            ok: false,
+            message: "Multiple episode-matching MP3 files were found; include " +
+                "AUDIO FOR SYNC or FORSYNC in the intended proxy filename."
         };
     }
 
@@ -587,6 +791,14 @@ function up_mc_isSyncAudioName(normalizedName) {
     var name = String(normalizedName || "");
     return name.indexOf("AUDIO-FOR-SYNC") !== -1 ||
         name.indexOf("AUDIOFORSYNC") !== -1 ||
+        name.indexOf("FOR-SYNC") !== -1 ||
+        name.indexOf("FORSYNC") !== -1 ||
+        name.indexOf("4-SYNC") !== -1 ||
+        name.indexOf("4SYNC") !== -1 ||
+        name.indexOf("SYNC-AUDIO") !== -1 ||
+        name.indexOf("SYNC-REFERENCE") !== -1 ||
+        name.indexOf("SYNC-REF") !== -1 ||
+        name.indexOf("SYNC-PROXY") !== -1 ||
         name.indexOf("ZENCASTR") !== -1;
 }
 
@@ -622,6 +834,7 @@ function up_mc_podcastNumber(projectName) {
  */
 function up_finalizeTalkMulticam() {
     var __log = [];
+    var layoutPending = false;
     try {
         if (!app.project) {
             return up_result(false, "No open Premiere project.", __log);
@@ -658,40 +871,134 @@ function up_finalizeTalkMulticam() {
 
         var syncClips = up_mc_findSyncMp3Clips(sequence);
         if (syncClips.length === 0) {
-            return up_result(false,
-                sequenceName + " contains no AUDIO FOR SYNC or ZENCASTR MP3. " +
-                    "The Zencastr MOV was not inserted.",
-                __log);
+            var savedSyncSeconds = up_mc_existingZencastrSyncMarkerSeconds(sequence);
+            if (isNaN(savedSyncSeconds)) {
+                return up_result(false,
+                    sequenceName + " contains neither a sync MP3 nor an " +
+                        UP_MULTICAM_SETUP.zencastrSyncMarkerName + " marker.",
+                    __log);
+            }
+            __log.push("Using saved " + UP_MULTICAM_SETUP.zencastrSyncMarkerName +
+                " marker at " + savedSyncSeconds.toFixed(3) + " seconds.");
         }
+        var syncClip = syncClips.length > 0 ? syncClips[0] : null;
         if (syncClips.length > 1) {
-            return up_result(false,
-                sequenceName + " contains multiple sync MP3 clips; the Zencastr " +
-                    "MOV start time is ambiguous.",
-                __log);
+            var canonicalPath = up_normalizeMediaPath(
+                up_mc_trackItemMediaPath(syncClip)
+            );
+            var canonicalSeconds = Number(syncClip.start.seconds);
+            var bottomTrackIndex = sequence.audioTracks.numTracks - 1;
+            for (var duplicateIndex = 1;
+                    duplicateIndex < syncClips.length;
+                    duplicateIndex++) {
+                var duplicate = syncClips[duplicateIndex];
+                var duplicatePath = up_normalizeMediaPath(
+                    up_mc_trackItemMediaPath(duplicate)
+                );
+                var duplicateSeconds = Number(duplicate.start.seconds);
+                if (duplicatePath !== canonicalPath ||
+                        isNaN(canonicalSeconds) || isNaN(duplicateSeconds) ||
+                        !up_mc_timesMatch(duplicateSeconds, canonicalSeconds)) {
+                    return up_result(false,
+                        sequenceName + " contains multiple distinct sync MP3 clips; " +
+                            "the Zencastr MOV start time is ambiguous.",
+                        __log);
+                }
+                if (up_mc_trackIndexForClip(sequence.audioTracks, duplicate) ===
+                        bottomTrackIndex) {
+                    syncClip = duplicate;
+                }
+            }
+            __log.push("Found duplicate copies of the same synchronized MP3; " +
+                "the bottom copy will be retained.");
         }
-
-        var syncClip = syncClips[0];
-        var syncProjectItem = syncClip.projectItem;
-        var syncMediaPath = up_mc_trackItemMediaPath(syncClip);
-        var syncSeconds = Number(syncClip.start.seconds);
-        if (isNaN(syncSeconds)) {
-            return up_result(false,
-                "Could not read the synchronized MP3 start time.",
-                __log);
+        var syncMediaPath = syncClip ? up_mc_trackItemMediaPath(syncClip) : "";
+        var syncSeconds = syncClip ? Number(syncClip.start.seconds) : savedSyncSeconds;
+        if (syncClip) {
+            if (isNaN(syncSeconds)) {
+                return up_result(false,
+                    "Could not read the synchronized MP3 start time.",
+                    __log);
+            }
+            syncSeconds = up_mc_getOrCreateZencastrSyncMarker(
+                sequence,
+                syncSeconds,
+                __log
+            );
         }
 
         if (sequence.videoTracks.numTracks < 5 ||
-                sequence.audioTracks.numTracks < 5) {
+                sequence.audioTracks.numTracks < 4) {
             return up_result(false,
-                sequenceName + " does not yet have the required V1-V5/A1-A5 tracks.",
+                sequenceName + " does not yet have the required V1-V5/A1-A4 tracks.",
                 __log);
         }
 
         var videoTrackIndex = 1; // V2, between CAM1 and CAM2
-        var audioTrackIndex = 4; // A5; A4 is the sync MP3 reference
+        var audioTrackIndex = 3; // A4
         try {
             app.project.openSequence(sequence.sequenceID);
         } catch (openError) {}
+
+        // The MP3 is only an alignment reference. Once its start is persisted
+        // as a sequence marker, remove every MP3 copy and free A1 for P1/P2.
+        if (syncMediaPath) {
+            up_mc_removeAudioPathOutsideTrack(sequence, syncMediaPath, -1);
+            __log.push("Captured sync MP3 start and removed the reference clip.");
+        }
+
+        // Complete and verify the recorder layout before Zencastr is inserted.
+        // P1/P2 share A1-A3, with each numbered part starting at the prior
+        // part's end. Original WAV instances remain until this verifies.
+        var wavs = up_mc_findAudioClipsByExtension(sequence, ["wav", "wave"]);
+        if (!UP_TALK_LAYOUT_SESSION) {
+            var recorderLayout = up_mc_recorderSourceLayout(sequence, wavs);
+            __log.push("Recorder source layout: P1 on " +
+                recorderLayout.p1.join("/") + "; P2 on " +
+                recorderLayout.p2.join("/") + ".");
+        }
+        var audioResult = up_mc_placeThreeChannelWavs(sequence, wavs);
+        if (!audioResult.ok) {
+            return up_result(false, audioResult.message, __log);
+        }
+        if (audioResult.message) { __log.push(audioResult.message); }
+        if (audioResult.pending) {
+            return up_result(true,
+                "Waiting for Premiere to refresh TALK placements.",
+                __log);
+        }
+        var manualP1End = up_mc_originalPartEnd(sequence, 1, [0, 1, 2]);
+        if (!isNaN(manualP1End)) {
+            up_mc_getOrCreateNamedMarker(
+                sequence,
+                UP_MULTICAM_SETUP.wavPartTwoMarkerName,
+                manualP1End,
+                "P2 begins at the intact P1 timeline end",
+                __log
+            );
+        }
+        __log.push("Verified recorder WAV P1/P2 sequentially on A1-A3.");
+        up_mc_clearAudioTrackExcept(
+            sequence.audioTracks[3],
+            movResult.source.mediaPath,
+            syncSeconds
+        );
+        __log.push("Cleared A4 for Zencastr audio.");
+
+        if (existingMov) {
+            var existingMovSeconds = Number(existingMov.start.seconds);
+            if (!up_mc_timesMatch(existingMovSeconds, syncSeconds)) {
+                try {
+                    existingMov.remove(0, 0);
+                    existingMov = null;
+                    __log.push("Removed an earlier Zencastr video copy at the " +
+                        "wrong timeline position.");
+                } catch (existingMovRemoveError) {
+                    __log.push("WARNING: Could not remove the earlier Zencastr " +
+                        "video copy before reinserting it.");
+                }
+            }
+        }
 
         if (!existingMov) {
             // Tracks already exist; overwrite avoids rippling synchronized media.
@@ -715,11 +1022,11 @@ function up_finalizeTalkMulticam() {
         }
 
         var placedSeconds = Number(placed.start.seconds);
-        if (isNaN(placedSeconds) || Math.abs(placedSeconds - syncSeconds) > 0.001) {
-            return up_result(false,
-                "The Zencastr MOV was inserted but its start does not match the sync MP3. " +
-                    "Expected " + syncSeconds.toFixed(3) + " seconds.",
-                __log);
+        if (!up_mc_timesMatch(placedSeconds, syncSeconds)) {
+            __log.push("WARNING: Premiere has not refreshed the Zencastr video " +
+                "start in the scripting DOM yet; expected " +
+                syncSeconds.toFixed(3) + " seconds. Continuing.");
+            layoutPending = true;
         }
 
         var cameraTracks = up_mc_cameraTrackPositions(sequence);
@@ -732,59 +1039,44 @@ function up_finalizeTalkMulticam() {
                 __log);
         }
 
-        var wavs = up_mc_findAudioClipsByExtension(sequence, ["wav", "wave"]);
-        var audioResult = up_mc_placeThreeChannelWavs(sequence, wavs);
-        if (!audioResult.ok) {
-            return up_result(false, audioResult.message, __log);
-        }
-        // Rebuild A4/A5 from captured project items. This also migrates a
-        // sequence produced by the earlier reversed A4-MOV/A5-MP3 layout.
         if (!up_mc_trackHasPathAtTime(
-                sequence.audioTracks[3], syncMediaPath, syncSeconds)) {
-            sequence.audioTracks[3].overwriteClip(
-                syncProjectItem,
-                String(syncSeconds)
+                sequence.audioTracks[3], movResult.source.mediaPath, syncSeconds)) {
+            up_mc_removeAudioPathAtWrongTimes(
+                sequence.audioTracks[3],
+                movResult.source.mediaPath,
+                syncSeconds
             );
-        }
-        if (!up_mc_trackHasPathAtTime(
-                sequence.audioTracks[4], movResult.source.mediaPath, syncSeconds)) {
-            sequence.audioTracks[4].overwriteClip(
+            sequence.audioTracks[3].overwriteClip(
                 movResult.source.item,
-                String(syncSeconds)
+                up_mc_secondsToTicks(syncSeconds)
             );
         }
         if (!up_mc_trackHasPathAtTime(
                 sequence.audioTracks[3],
-                syncMediaPath,
-                syncSeconds
-            )) {
-            return up_result(false, "Premiere did not place the sync MP3 on A4.", __log);
-        }
-        if (!up_mc_trackHasPathAtTime(
-                sequence.audioTracks[4],
                 movResult.source.mediaPath,
                 syncSeconds
             )) {
-            return up_result(false, "Premiere did not place Zencastr MOV audio on A5.", __log);
+            __log.push("WARNING: Premiere has not refreshed Zencastr audio on " +
+                "A4 in the scripting DOM yet; continuing.");
+            layoutPending = true;
         }
-        up_mc_removeAudioPathOutsideTrack(sequence, syncMediaPath, 3);
-        up_mc_removeAudioPathOutsideTrack(sequence, movResult.source.mediaPath, 4);
+        up_mc_removeAudioPathOutsideTrack(sequence, movResult.source.mediaPath, 3);
 
         var movAudio = up_mc_findSequenceClipByPath(
             sequence.audioTracks,
             movResult.source.mediaPath
         );
-        if (!movAudio || up_mc_trackIndexForClip(sequence.audioTracks, movAudio) !== 4) {
-            return up_result(false,
-                "Zencastr MOV video was placed, but its audio was not found on A5.",
-                __log);
+        if (!movAudio || up_mc_trackIndexForClip(sequence.audioTracks, movAudio) !== 3) {
+            __log.push("WARNING: Zencastr audio placement on A4 is awaiting " +
+                "Premiere's timeline refresh.");
+            layoutPending = true;
         }
 
         __log.push("Sync MP3 starts at " + syncSeconds.toFixed(3) + " seconds.");
         __log.push("Video: CAM1 / Zencastr / CAM2 / CAM3 / CAM4 on V1-V5.");
-        __log.push("Audio: WAV mono channels on A1-A3, sync MP3 on A4, " +
-            "Zencastr MOV on A5; camera audio preserved on A6 and below.");
-        return up_result(true,
+        __log.push("Audio: WAV P1/P2 share A1-A3; Zencastr MOV audio is on A4.");
+        return up_result(true, layoutPending ?
+            "Waiting for Premiere to refresh TALK placements." :
             "Aligned and organized Zencastr media in " + sequenceName + ".",
             __log);
     } catch (e) {
@@ -795,26 +1087,133 @@ function up_finalizeTalkMulticam() {
     }
 }
 
-function up_mc_audioFrontIsReserved(sequence) {
-    if (sequence.audioTracks.numTracks < 5) { return false; }
-    for (var t = 0; t < 5; t++) {
-        var track = sequence.audioTracks[t];
-        for (var c = 0; c < track.clips.numItems; c++) {
-            var clip = track.clips[c];
-            var path = up_mc_trackItemMediaPath(clip);
-            var ext = up_fileExtension(path);
-            var normalized = up_mc_normalizedBase(
-                clip.projectItem ? clip.projectItem.name : ""
-            );
-            var isSyncMp3 = ext === "mp3" && up_mc_isSyncAudioName(normalized);
-            var isZencastrMov = ext === "mov" &&
-                normalized.indexOf("ZENCASTR") !== -1;
-            var allowed = (t <= 2 && (ext === "wav" || ext === "wave")) ||
-                ((t === 3 || t === 4) && (isSyncMp3 || isZencastrMov));
-            if (!allowed) { return false; }
+/**
+ * Persist the audio-synchronized Zencastr alignment independently of track
+ * moves. Subsequent layout passes use this sequence marker as their authority.
+ */
+function up_mc_getOrCreateZencastrSyncMarker(sequence, fallbackSeconds, log) {
+    try {
+        var markers = sequence.markers;
+        if (!markers) { return fallbackSeconds; }
+        var existingSeconds = up_mc_existingZencastrSyncMarkerSeconds(sequence);
+        if (!isNaN(existingSeconds)) {
+            log.push("Using " + UP_MULTICAM_SETUP.zencastrSyncMarkerName +
+                " marker at " + existingSeconds.toFixed(3) + " seconds.");
+            return existingSeconds;
+        }
+        var created = markers.createMarker(fallbackSeconds);
+        if (created) {
+            created.name = UP_MULTICAM_SETUP.zencastrSyncMarkerName;
+            try {
+                created.comments = "Source: synchronized Zencastr MP3";
+            } catch (commentError) {}
+            log.push("Created " + UP_MULTICAM_SETUP.zencastrSyncMarkerName +
+                " marker at " + Number(fallbackSeconds).toFixed(3) + " seconds.");
+        }
+    } catch (markerError) {
+        log.push("WARNING: Could not create the Zencastr sync marker; " +
+            "the captured MP3 time will be used for this pass.");
+    }
+    return fallbackSeconds;
+}
+
+function up_mc_getOrCreateNamedMarker(sequence, markerName, seconds, comments, log) {
+    try {
+        var markers = sequence.markers;
+        if (!markers) { return seconds; }
+        var marker = markers.getFirstMarker();
+        var guard = 0;
+        while (marker && guard < 10000) {
+            if (String(marker.name || "") === markerName) {
+                var existingSeconds = up_mc_markerSeconds(marker);
+                if (!isNaN(existingSeconds) && up_mc_timesMatch(existingSeconds, seconds)) {
+                    if (log) {
+                        log.push("Using " + markerName + " marker at " +
+                            Number(seconds).toFixed(3) + " seconds.");
+                    }
+                    return existingSeconds;
+                }
+            }
+            marker = markers.getNextMarker(marker);
+            guard++;
+        }
+        var created = markers.createMarker(seconds);
+        if (created) {
+            created.name = markerName;
+            try { created.comments = comments || ""; } catch (commentError) {}
+            if (log) {
+                log.push("Created " + markerName + " marker at " +
+                    Number(seconds).toFixed(3) + " seconds.");
+            }
+        }
+    } catch (markerError) {
+        if (log) { log.push("WARNING: Could not create " + markerName + " marker."); }
+    }
+    return seconds;
+}
+
+function up_mc_existingZencastrSyncMarkerSeconds(sequence) {
+    try {
+        var markers = sequence.markers;
+        if (!markers) { return NaN; }
+        var marker = markers.getFirstMarker();
+        var guard = 0;
+        while (marker && guard < 10000) {
+            if (String(marker.name || "") ===
+                    UP_MULTICAM_SETUP.zencastrSyncMarkerName) {
+                var seconds = up_mc_markerSeconds(marker);
+                if (!isNaN(seconds)) { return seconds; }
+            }
+            marker = markers.getNextMarker(marker);
+            guard++;
+        }
+    } catch (markerError) {}
+    return NaN;
+}
+
+function up_mc_markerSeconds(marker) {
+    try {
+        var seconds = Number(marker.start.seconds);
+        if (!isNaN(seconds)) { return seconds; }
+    } catch (timeError) {}
+    var direct = Number(marker.start);
+    return isNaN(direct) ? NaN : direct;
+}
+
+/** Track.overwriteClip expects a tick string, unlike Sequence.overwriteClip. */
+function up_mc_secondsToTicks(seconds) {
+    return String(Math.round(Number(seconds) * 254016000000));
+}
+
+function up_mc_removeAudioPathAtWrongTimes(track, mediaPath, keepSeconds) {
+    var expected = up_normalizeMediaPath(mediaPath);
+    for (var c = track.clips.numItems - 1; c >= 0; c--) {
+        var clip = track.clips[c];
+        var clipSeconds = Number(clip.start.seconds);
+        if (up_normalizeMediaPath(up_mc_trackItemMediaPath(clip)) === expected &&
+                !up_mc_timesMatch(clipSeconds, keepSeconds)) {
+            try { clip.remove(0, 0); } catch (removeError) {}
         }
     }
-    return true;
+}
+
+function up_mc_clearAudioTrackExcept(track, keepMediaPath, keepSeconds) {
+    var expected = up_normalizeMediaPath(keepMediaPath);
+    for (var c = track.clips.numItems - 1; c >= 0; c--) {
+        var clip = track.clips[c];
+        var clipPath = up_normalizeMediaPath(up_mc_trackItemMediaPath(clip));
+        if (clipPath !== expected ||
+                !up_mc_timesMatch(Number(clip.start.seconds), keepSeconds)) {
+            try { clip.remove(0, 0); } catch (removeError) {}
+        }
+    }
+}
+
+function up_mc_timesMatch(leftSeconds, rightSeconds) {
+    var left = Number(leftSeconds);
+    var right = Number(rightSeconds);
+    return !isNaN(left) && !isNaN(right) &&
+        Math.abs(left - right) <= UP_MULTICAM_SETUP.timeToleranceSeconds;
 }
 
 function up_mc_removeAudioPathOutsideTrack(sequence, mediaPath, keepTrackIndex) {
@@ -880,74 +1279,191 @@ function up_mc_findAudioClipsByExtension(sequence, extensions) {
     return found;
 }
 
-function up_mc_placeThreeChannelWavs(sequence, clips) {
-    if (!clips || clips.length === 0) {
-        return { ok: false, message: "No recorder WAV clips were found for A1-A3." };
-    }
-    var sources = [];
-    var seen = {};
+function up_mc_recorderSourceLayout(sequence, clips) {
+    var result = { p1: [], p2: [] };
     for (var i = 0; i < clips.length; i++) {
-        var mediaPath = up_mc_trackItemMediaPath(clips[i]);
-        var seconds = Number(clips[i].start.seconds);
-        var key = up_normalizeMediaPath(mediaPath) + "@" + seconds.toFixed(6);
-        if (seen[key]) { continue; }
-        seen[key] = true;
-        sources.push({
-            projectItem: clips[i].projectItem,
-            mediaPath: mediaPath,
-            seconds: seconds
-        });
-    }
-
-    for (i = 0; i < sources.length; i++) {
-        var source = sources[i];
-        var alreadyPlaced = true;
-        for (var existingTarget = 0; existingTarget < 3; existingTarget++) {
-            if (!up_mc_trackHasPathAtTime(
-                    sequence.audioTracks[existingTarget],
-                    source.mediaPath,
-                    source.seconds
-                )) {
-                alreadyPlaced = false;
-                break;
-            }
+        var part = up_mc_wavPartNumber(clips[i].projectItem);
+        var trackIndex = up_mc_trackIndexForClip(sequence.audioTracks, clips[i]);
+        var label = "A" + (trackIndex + 1);
+        var destination = part === 1 ? result.p1 : (part === 2 ? result.p2 : null);
+        if (destination && destination.indexOf(label) === -1) {
+            destination.push(label);
         }
-        if (alreadyPlaced) { continue; }
-        // The saved WAV interpretation exposes three mono source clips. An
-        // overwrite beginning at A1 fans those clips across A1, A2, and A3.
-        sequence.overwriteClip(
-            source.projectItem,
-            String(source.seconds),
-            0,
-            0
-        );
+    }
+    return result;
+}
+
+function up_mc_placeThreeChannelWavs(sequence, clips) {
+    var sources = [];
+    var sourceByPath = {};
+    var i;
+    if (clips && clips.length > 0) {
+        for (i = 0; i < clips.length; i++) {
+            var mediaPath = up_mc_trackItemMediaPath(clips[i]);
+            var seconds = Number(clips[i].start.seconds);
+            var key = up_normalizeMediaPath(mediaPath);
+            var duration = up_mc_trackItemDurationSeconds(clips[i]);
+            if (sourceByPath[key]) {
+                if (duration > sourceByPath[key].duration) {
+                    sourceByPath[key].duration = duration;
+                }
+                continue;
+            }
+            var source = {
+                projectItem: clips[i].projectItem,
+                mediaPath: mediaPath,
+                seconds: seconds,
+                duration: duration,
+                sourceIn: up_mc_trackItemSourceSeconds(clips[i], "inPoint"),
+                sourceOut: up_mc_trackItemSourceSeconds(clips[i], "outPoint"),
+                part: up_mc_wavPartNumber(clips[i].projectItem)
+            };
+            sourceByPath[key] = source;
+            sources.push(source);
+        }
+    } else if (UP_TALK_LAYOUT_SESSION &&
+            UP_TALK_LAYOUT_SESSION.sequenceID === sequence.sequenceID &&
+            UP_TALK_LAYOUT_SESSION.wavSources.length > 0) {
+        sources = UP_TALK_LAYOUT_SESSION.wavSources;
+        for (i = 0; i < sources.length; i++) {
+            sourceByPath[up_normalizeMediaPath(sources[i].mediaPath)] = sources[i];
+        }
+    } else {
+        return { ok: false, pending: false,
+            message: "No recorder WAV clips were found. Restore or recreate the " +
+                "TALK multicam before running Finish TALK Layout again." };
     }
 
+    sources.sort(function (left, right) {
+        if (left.part !== null && right.part !== null && left.part !== right.part) {
+            return left.part - right.part;
+        }
+        if (left.part !== null && right.part === null) { return -1; }
+        if (left.part === null && right.part !== null) { return 1; }
+        return left.seconds - right.seconds;
+    });
+
+    var previousPart = null;
+    var previousEnd = null;
+    for (i = 0; i < sources.length; i++) {
+        source = sources[i];
+        source.targetSeconds = source.seconds;
+        if (source.part !== null && previousPart !== null &&
+                source.part === previousPart + 1 && previousEnd !== null) {
+            source.targetSeconds = previousEnd;
+        }
+        previousPart = source.part;
+        previousEnd = source.duration > 0 ?
+            source.targetSeconds + source.duration : null;
+    }
+
+    UP_TALK_LAYOUT_SESSION = {
+        sequenceID: sequence.sequenceID,
+        wavSources: sources
+    };
+
+    // WAV placement is intentionally manual. Re-inserting ProjectItems with
+    // overwriteClip can lose the synchronized TrackItems' original in/out
+    // state, and CEP UI shortcuts cannot reliably act on ExtendScript's
+    // internal selection. This function only recognizes the completed layout.
+    var missingPlacements = [];
     for (i = 0; i < sources.length; i++) {
         source = sources[i];
         for (var target = 0; target < 3; target++) {
-            if (!up_mc_trackHasPathAtTime(
+            var placedWav = up_mc_findTrackClipAtTime(
                     sequence.audioTracks[target],
                     source.mediaPath,
-                    source.seconds
+                    source.targetSeconds
+                );
+            if (!placedWav) {
+                missingPlacements.push(source.projectItem.name + " on A" +
+                    (target + 1));
+                break;
+            }
+            var placedDuration = up_mc_trackItemDurationSeconds(placedWav);
+            if (source.duration > 0 &&
+                    !up_mc_timesMatch(placedDuration, source.duration)) {
+                missingPlacements.push(source.projectItem.name + " on A" +
+                    (target + 1) + " has the wrong duration");
+                break;
+            }
+        }
+    }
+
+    if (missingPlacements.length > 0) {
+        return {
+            ok: false,
+            pending: false,
+            message: "Manual WAV layout needed: place P1 then P2 sequentially " +
+                "on A1-A3 and click Finish TALK Layout again. Missing: " +
+                missingPlacements.join(", ") + "."
+        };
+    }
+
+    // Remove stale front-track copies at the old synchronized P2/P3 positions.
+    // Each recorder part should exist only once per mono destination track.
+    for (var frontTrack = 0; frontTrack < 3; frontTrack++) {
+        var destination = sequence.audioTracks[frontTrack];
+        for (var frontClip = destination.clips.numItems - 1; frontClip >= 0; frontClip--) {
+            var destinationClip = destination.clips[frontClip];
+            var destinationPath = up_normalizeMediaPath(
+                up_mc_trackItemMediaPath(destinationClip)
+            );
+            var expectedSource = sourceByPath[destinationPath];
+            if (expectedSource && !up_mc_timesMatch(
+                    Number(destinationClip.start.seconds),
+                    expectedSource.targetSeconds
                 )) {
-                return { ok: false, message: "Premiere did not fan " +
-                    source.projectItem.name + " across WAV tracks A1-A3." };
+                try { destinationClip.remove(0, 0); } catch (frontRemoveError) {}
             }
         }
     }
 
     // Remove only the original WAV instances below the reserved A1-A3 area.
+    var removedOriginals = 0;
     for (var t = sequence.audioTracks.numTracks - 1; t >= 3; t--) {
         var track = sequence.audioTracks[t];
         for (var c = track.clips.numItems - 1; c >= 0; c--) {
             var ext = up_fileExtension(up_mc_trackItemMediaPath(track.clips[c]));
             if (ext === "wav" || ext === "wave") {
-                try { track.clips[c].remove(0, 0); } catch (removeError) {}
+                try {
+                    track.clips[c].remove(0, 0);
+                    removedOriginals++;
+                } catch (removeError) {}
             }
         }
     }
-    return { ok: true, message: "" };
+    return {
+        ok: true,
+        pending: false,
+        message: removedOriginals > 0 ?
+            "Removed " + removedOriginals +
+                " superseded WAV clip(s) from A4 and below." : ""
+    };
+}
+
+function up_mc_wavPartNumber(projectItem) {
+    var normalized = up_mc_normalizedBase(projectItem ? projectItem.name : "");
+    var match = normalized.match(/(?:^|-)P(?:ART)?-?(\d+)(?:-|$)/);
+    return match ? Number(match[1]) : null;
+}
+
+function up_mc_trackItemDurationSeconds(trackItem) {
+    try {
+        var start = Number(trackItem.start.seconds);
+        var end = Number(trackItem.end.seconds);
+        if (!isNaN(start) && !isNaN(end) && end > start) { return end - start; }
+    } catch (e) {}
+    return 0;
+}
+
+function up_mc_trackItemSourceSeconds(trackItem, propertyName) {
+    try {
+        var value = trackItem[propertyName];
+        var seconds = Number(value.seconds);
+        return isNaN(seconds) ? NaN : seconds;
+    } catch (e) {}
+    return NaN;
 }
 
 function up_mc_consolidateAudioClips(sequence, clips, targetTrackIndex) {
@@ -970,7 +1486,7 @@ function up_mc_consolidateAudioClips(sequence, clips, targetTrackIndex) {
         if (source.sourceTrack === targetTrackIndex) { continue; }
         sequence.audioTracks[targetTrackIndex].overwriteClip(
             source.projectItem,
-            String(source.seconds)
+            up_mc_secondsToTicks(source.seconds)
         );
     }
 
@@ -996,15 +1512,19 @@ function up_mc_consolidateAudioClips(sequence, clips, targetTrackIndex) {
 }
 
 function up_mc_trackHasPathAtTime(track, mediaPath, seconds) {
+    return !!up_mc_findTrackClipAtTime(track, mediaPath, seconds);
+}
+
+function up_mc_findTrackClipAtTime(track, mediaPath, seconds) {
     var expected = up_normalizeMediaPath(mediaPath);
     for (var c = 0; c < track.clips.numItems; c++) {
         var clip = track.clips[c];
         if (up_normalizeMediaPath(up_mc_trackItemMediaPath(clip)) === expected &&
-                Math.abs(Number(clip.start.seconds) - seconds) <= 0.001) {
-            return true;
+                up_mc_timesMatch(Number(clip.start.seconds), seconds)) {
+            return clip;
         }
     }
-    return false;
+    return null;
 }
 
 function up_mc_trackIndexForClip(tracks, targetClip) {
@@ -1021,6 +1541,16 @@ function up_mc_findSequence(sequenceName) {
     if (!app.project || !app.project.sequences) { return null; }
     for (var i = 0; i < app.project.sequences.numSequences; i++) {
         if (String(app.project.sequences[i].name) === sequenceName) {
+            return app.project.sequences[i];
+        }
+    }
+    return null;
+}
+
+function up_mc_findSequenceByID(sequenceID) {
+    if (!app.project || !app.project.sequences) { return null; }
+    for (var i = 0; i < app.project.sequences.numSequences; i++) {
+        if (String(app.project.sequences[i].sequenceID) === String(sequenceID)) {
             return app.project.sequences[i];
         }
     }

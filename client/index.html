@@ -13,6 +13,14 @@
             <p class="app__subtitle">Podcast automation panel</p>
         </header>
 
+        <section class="config">
+            <label class="config__label" for="clipCount">Clip Count</label>
+            <input id="clipCount" class="config__input" type="number" min="0" step="1"
+                inputmode="numeric" placeholder="auto" />
+            <button id="btnDetect" class="config__btn" type="button"
+                title="Read the clip count from PodcastClips.txt">Detect from .txt</button>
+        </section>
+
         <main class="actions">
             <div class="actions__group">
                 <div class="actions__heading">Episode Setup</div>
@@ -30,13 +38,30 @@
                 </button>
 
                 <button id="btnCreateMulticams" class="action action--primary" type="button">
-                    <span class="action__label">Create Episode Multicams</span>
-                    <span class="action__desc">Build and verify INTRO-### and TALK-### from matching cameras, WAV recorders, and the sync MP3, then open both Timeline tabs.</span>
+                    <span class="action__title">
+                        <span class="action__label">Create Episode Multicams</span>
+                        <span class="action__states">
+                            <span id="multicamState" class="action__state action__state--multicam">Multicams: checking…</span>
+                            <span id="lumetriState" class="action__state action__state--video">Lumetri: checking…</span>
+                            <span id="cameraColorState" class="action__state action__state--video">Color: checking…</span>
+                        </span>
+                    </span>
+                    <span class="action__desc">Build INTRO-### and TALK-###, include the TALK sync MP3, then analyze and apply consistent camera-group color to both multicams.</span>
                 </button>
+
+                <button id="btnAnalyzeCameraGroups" class="action" type="button">
+                    <span class="action__label">Analyze Camera Groups</span>
+                    <span class="action__desc">Analyze representative camera frames, review Basic Correction values, and apply them consistently to the selected multicam clips.</span>
+                </button>
+
+                <div id="colorProgress" class="color-progress" hidden>
+                    <div class="color-progress__track"><span id="colorProgressBar"></span></div>
+                    <span id="colorProgressText">Preparing…</span>
+                </div>
 
                 <button id="btnFinishTalk" class="action" type="button">
                     <span class="action__label">Finish TALK Layout</span>
-                    <span class="action__desc">Separately arrange WAV P1/P2 on A1-A3, sync MP3 on A4, and place Zencastr video/audio on V2/A5.</span>
+                    <span class="action__desc">Mark the sync MP3 start, remove it, place WAV P1/P2 sequentially on shared A1-A3 tracks, then place Zencastr on V2/A4.</span>
                 </button>
 
             </div>
@@ -44,9 +69,9 @@
             <div class="actions__group">
                 <div class="actions__heading">Editing &amp; Export</div>
 
-                <button id="btnMarkClips" class="action action--primary" type="button">
+                <button id="btnMarkClips" class="action" type="button">
                     <span class="action__label">Mark Clips</span>
-                    <span class="action__desc">Choose episode-ranked Google Docs from the last seven days or use local PodcastClips.txt, then build markers and clip sequences.</span>
+                    <span class="action__desc">Read PodcastClips.txt, mark the episode LowRes sequence, build clip sequences and transitions. Uses the Clip Count above (auto from the .txt).</span>
                 </button>
 
                 <button id="btnCollectEpisode" class="action" type="button">
@@ -73,41 +98,25 @@
         </section>
     </div>
 
-    <div id="googleDocsDialog" class="dialog" role="dialog" aria-modal="true" aria-labelledby="googleDocsTitle" hidden>
-        <div class="dialog__backdrop" data-dialog-close="true"></div>
-        <section class="dialog__panel">
-            <header class="dialog__header">
-                <div>
-                    <h2 id="googleDocsTitle" class="dialog__title">Mark Clips · Choose Notes</h2>
-                    <p class="dialog__subtitle">Google Docs viewed in the last seven days; the active project episode is ranked first. Text loads only after selection.</p>
-                </div>
-                <button id="btnCloseGoogleDocs" class="dialog__close" type="button" aria-label="Close">×</button>
-            </header>
-
-            <div class="dialog__content">
-                <div class="dialog__column">
-                    <div class="dialog__section-title">Recent documents · 7 days</div>
-                    <div id="googleDocsList" class="document-list" aria-live="polite"></div>
-                </div>
-                <div class="dialog__column dialog__column--preview">
-                    <div class="dialog__section-title">Text preview</div>
-                    <div id="googleDocsValidation" class="validation">Select a document to preview it.</div>
-                    <pre id="googleDocsPreview" class="document-preview"></pre>
-                </div>
+    <div id="colorPreview" class="modal" role="dialog" aria-modal="true"
+            aria-labelledby="colorPreviewTitle" hidden>
+        <div class="modal__panel">
+            <h2 id="colorPreviewTitle">Proposed Camera Corrections</h2>
+            <p class="modal__intro">Review the camera/profile detection and correction values before applying.</p>
+            <div id="colorPreviewGroups" class="color-preview"></div>
+            <p id="colorNormalizationWarning" class="color-preview__warning" hidden></p>
+            <div class="modal__actions">
+                <button id="btnCancelColor" class="modal__button" type="button">Cancel</button>
+                <button id="btnApplyColor" class="modal__button modal__button--primary" type="button">Apply to Groups</button>
             </div>
-
-            <footer class="dialog__footer">
-                <button id="btnRefreshGoogleDocs" class="dialog__button" type="button">Refresh</button>
-                <button id="btnUseLocalClips" class="dialog__button" type="button">Use Local TXT</button>
-                <span class="dialog__spacer"></span>
-                <button id="btnCancelGoogleDocs" class="dialog__button" type="button">Cancel</button>
-                <button id="btnSaveGoogleDoc" class="dialog__button dialog__button--primary" type="button" disabled>Save &amp; Mark Clips</button>
-            </footer>
-        </section>
+        </div>
     </div>
 
     <script src="js/CSInterface.js"></script>
-    <script src="js/googleDocs.js"></script>
+    <script src="js/auto-color/premiereInterface.js"></script>
+    <script src="js/auto-color/apiClient.js"></script>
+    <script src="js/auto-color/lumetriApplier.js"></script>
+    <script src="js/auto-color/intelligentColor.js"></script>
     <script src="js/main.js"></script>
 </body>
 </html>

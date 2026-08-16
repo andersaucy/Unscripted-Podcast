@@ -156,7 +156,18 @@ function up_getEpisodeSetupStatus() {
         identityConfigured: false,
         identityEpisodeNumber: "",
         identityGraphicConfigured: false,
-        identityLowResConfigured: false
+        identityLowResConfigured: false,
+        introMulticamCreated: false,
+        talkMulticamCreated: false,
+        multicamCount: 0,
+        multicamsCreated: false,
+        lumetriTargetCount: 0,
+        lumetriConfiguredCount: 0,
+        lumetriConfigured: false,
+        colorAnalyzedSequenceCount: 0,
+        colorAnalyzedClipCount: 0,
+        colorAnalysisTargetClipCount: 0,
+        colorAnalysisConfigured: false
     };
     try {
         var context = up_getFootageContext([]);
@@ -211,6 +222,38 @@ function up_getEpisodeSetupStatus() {
             status.identityConfigured = identity.graphicConfigured &&
                 identity.lowResConfigured;
         }
+        if (status.identityEpisodeNumber &&
+                typeof up_mc_sequenceExists === "function") {
+            status.introMulticamCreated = up_mc_sequenceExists(
+                "INTRO-" + status.identityEpisodeNumber
+            );
+            status.talkMulticamCreated = up_mc_sequenceExists(
+                "TALK-" + status.identityEpisodeNumber
+            );
+            status.multicamCount =
+                (status.introMulticamCreated ? 1 : 0) +
+                (status.talkMulticamCreated ? 1 : 0);
+            status.multicamsCreated = status.introMulticamCreated &&
+                status.talkMulticamCreated;
+            if (typeof up_colorEpisodeMulticamCoverage === "function") {
+                var colorCoverage = up_colorEpisodeMulticamCoverage(
+                    status.identityEpisodeNumber
+                );
+                status.lumetriTargetCount = colorCoverage.targetCount;
+                status.lumetriConfiguredCount = colorCoverage.configuredCount;
+                status.lumetriConfigured = colorCoverage.configured;
+            }
+            if (typeof up_colorEpisodeAnalysisCoverage === "function") {
+                var analysisCoverage = up_colorEpisodeAnalysisCoverage(
+                    status.identityEpisodeNumber
+                );
+                status.colorAnalyzedSequenceCount =
+                    analysisCoverage.analyzedSequenceCount;
+                status.colorAnalyzedClipCount = analysisCoverage.analyzedClipCount;
+                status.colorAnalysisTargetClipCount = analysisCoverage.clipCount;
+                status.colorAnalysisConfigured = analysisCoverage.configured;
+            }
+        }
         status.message = status.imported ?
             status.importedCount + " footage file(s) imported." :
             "No footage from 01_Assets/Footage is present in the project.";
@@ -238,6 +281,22 @@ function up_setupStatusJSON(status) {
             (status.identityGraphicConfigured ? "true" : "false") +
         ',"identityLowResConfigured":' +
             (status.identityLowResConfigured ? "true" : "false") +
+        ',"introMulticamCreated":' +
+            (status.introMulticamCreated ? "true" : "false") +
+        ',"talkMulticamCreated":' +
+            (status.talkMulticamCreated ? "true" : "false") +
+        ',"multicamCount":' + Number(status.multicamCount || 0) +
+        ',"multicamsCreated":' + (status.multicamsCreated ? "true" : "false") +
+        ',"lumetriTargetCount":' + Number(status.lumetriTargetCount || 0) +
+        ',"lumetriConfiguredCount":' + Number(status.lumetriConfiguredCount || 0) +
+        ',"lumetriConfigured":' + (status.lumetriConfigured ? "true" : "false") +
+        ',"colorAnalyzedSequenceCount":' +
+            Number(status.colorAnalyzedSequenceCount || 0) +
+        ',"colorAnalyzedClipCount":' + Number(status.colorAnalyzedClipCount || 0) +
+        ',"colorAnalysisTargetClipCount":' +
+            Number(status.colorAnalysisTargetClipCount || 0) +
+        ',"colorAnalysisConfigured":' +
+            (status.colorAnalysisConfigured ? "true" : "false") +
         '}';
 }
 

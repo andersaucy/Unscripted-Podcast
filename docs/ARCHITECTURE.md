@@ -23,29 +23,6 @@ Responsibilities:
 - Call host functions through `CSInterface.evalScript`.
 - Parse structured host results.
 - Present a timestamped diagnostic log.
-- Use the optional Node-enabled `googleDocs.js` boundary for HTTPS requests and
-  local UTF-8 file writes; credentials never cross into ExtendScript.
-
-### Optional Google Docs bridge
-
-```mermaid
-flowchart LR
-    CEP["Mark Clips source chooser"] --> Config["Gitignored local config"]
-    CEP --> Apps["Apps Script POST endpoint"]
-    Apps --> Guard["Bearer token + 7-day recency gate"]
-    Guard --> Doc["Selected Google Doc"]
-    Doc --> Preview["Plain-text preview + range validation"]
-    Preview --> Backup["Backup existing PodcastClips.txt"]
-    Backup --> TXT["Write PodcastClips.txt"]
-    TXT --> Mark["Existing Mark Clips task"]
-```
-
-The Google-side source and example configuration are safe to publish. The real
-endpoint/token pair is loaded only from `config/google-docs.json`, which is
-ignored and rejected by repository validation if accidentally tracked. The
-Apps Script returns only Docs viewed in the previous seven days, ranks an exact
-three-digit episode match first, rechecks the selected file's recency before
-returning text, caps list/content sizes, and never logs request bodies or text.
 
 ### ExtendScript host
 
@@ -57,6 +34,8 @@ and includes the task modules loaded into Premiere's ExtendScript runtime.
 | `episodeIdentity.jsx` | Derive `PODCAST###`, set the numeric `Episode Number` control on the single V2 AE MOGRT in `_CLIP INTRO`, migrate `LowRes` to `### LowRes_v1`, and provide shared sequence lookup helpers. |
 | `episodeSetup.jsx` | Infer the episode media folder, mirror disk hierarchy as bins, skip duplicates, import footage, select matching Project-panel items, and apply recorder-specific source audio mappings. |
 | `multicamSetup.jsx` | Discover and validate INTRO/TALK source groups, derive the podcast number and flexible TALK stem, order CAM1 first, select sources, verify native multicam creation, and align a Zencastr MOV from its synchronized MP3 proxy. |
+| `colorSetup.jsx` | Apply Lumetri to the standard episode multicam sequences and report coverage. |
+| `intelligentColor.jsx` | Group current sequence clips, ensure Lumetri exists, apply analyzer recommendations, and record a clip-signature completion marker. |
 | `applyAudioChannelPreset.applescript` | On macOS, select an exact named preset in Premiere's native Modify Clip dialog and confirm it without coordinate-based clicks. |
 | `createEpisodeMulticam.applescript` | On macOS, configure and submit Premiere's native Create Multi-Camera Source Sequence dialog using semantic controls. |
 | `collectEpisode.jsx` | Save the active project and use Premiere Project Manager to create a non-destructive, self-contained episode copy. |
@@ -80,10 +59,7 @@ ExtendScript lacks a native JSON serializer in the targeted runtime, so
 
 ```mermaid
 flowchart TD
-    Google["Selected Google Doc"] --> Preview["Preview and validate"]
-    Preview --> File["Back up and write PodcastClips.txt"]
-    Local["Existing local TXT"] --> File
-    File --> Parse["Parse TITLE / FROM / TO"]
+    File["Local PodcastClips.txt"] --> Parse["Parse TITLE / FROM / TO"]
     Parse --> Validate{"Valid positive ranges?"}
     Validate -- No --> Warn["Log and skip invalid range"]
     Validate -- Yes --> Mark["Mark episode ### LowRes_v1 sequence"]
@@ -132,22 +108,31 @@ other dialog default. The host then verifies the exact `INTRO-###` or
 `TALK-###` sequence name.
 
 For TALK media with unreliable Zencastr MOV audio, the discovery layer prefers
-one matching MP3 containing `audio for sync` or `Zencastr`. The MOV stays out of
-the native audio-analysis pass. After the MP3 is synchronized, the host reads
-its resulting `TrackItem.start` and overwrites the MOV at that time on newly
-addressed video/audio tracks. This avoids rippling the synchronized sequence and
-is idempotent when the workflow is resumed.
+one matching sync MP3. Standard sync keywords are recognized, with a unique
+episode/stem-matching MP3 as a guarded fallback. The MOV stays out of the native
+audio-analysis pass. After the MP3 is synchronized, the host persists its
+`TrackItem.start` in a sequence marker and uses that time for optional MOV
+placement. This avoids rippling the synchronized sequence and is idempotent when
+the workflow is resumed.
 
 The panel deliberately exposes this post-processing as **Finish TALK Layout**,
 separate from **Create Episode Multicams**. Core multicam creation ends after
 exact sequence verification and never depends on Add Tracks or MOV placement.
 
-Before that overwrite, a semantic macOS helper uses Premiere's native Add
-Tracks dialog to insert V2 after CAM1 and reserve five new audio tracks before
-the existing audio. That native insertion shifts all camera audio safely to A6
-and below. The host then verifies and finishes CAM1/Zencastr/CAM2/CAM3/CAM4 on
-V1-V5, the three WAV mono channels on A1-A3, sync MP3 on A4, and MOV audio on
-A5. Only duplicate WAV/MP3 instances below the reserved area are removed.
+The embedded and standalone Smart Camera Color panels share the same analyzer
+contract. Each records successful analysis in a `Smart Camera Color Analyzed`
+sequence marker. Unscripted-Podcast compares the marker's clip signature with
+the current INTRO/TALK clips so changes invalidate stale completion state.
+
+Image analysis remains outside Premiere in the `python/` modules. The panel
+extracts representative frames asynchronously, receives versioned JSON values,
+and keeps Premiere-specific grouping and Lumetri application in CEP/ExtendScript.
+
+When needed, a semantic macOS helper uses Premiere's native Add Tracks dialog to
+insert V2 after CAM1 without rebuilding source TrackItems. Finish TALK Layout
+recognizes intact recorder P1/P2 media arranged sequentially on A1-A3, removes
+the no-longer-needed sync reference after its marker is saved, and places the
+Zencastr MOV on V2 with its audio on A4. Camera media remains preserved.
 
 ## Design constraints
 
@@ -161,7 +146,12 @@ Identity failures stop before the longer import; a successful no-op import
 - CEP and ExtendScript are legacy Adobe technologies, but they expose host
   capabilities that were required when this tool was built.
 - QE DOM is used only for transitions. QE is undocumented, so calls are isolated
-  in the clip-building task.
+  in the clip-building and Lumetri-effect insertion tasks.
+- Lumetri parameter lookup currently uses English display names because CEP does
+  not expose stable public match names for every Basic Correction control.
+- The localhost service receives filesystem paths to media chosen inside the
+  active Premiere project. It does not listen on external network interfaces or
+  upload frames.
 - Adobe Media Encoder preset paths and output destinations are configuration,
   not secrets, and use portable defaults in source control.
 - Source audio-channel interpretation first uses Premiere's legacy
@@ -181,8 +171,6 @@ Tasks validate their prerequisites before modifying the project:
 - Parseable timestamp file.
 - Valid timestamp ranges.
 - Existing export bin and Media Encoder presets.
-- Valid Google Apps Script URL, private token, seven-day recent document,
-  response size, and timestamp preview before downloaded text is written.
 
 The panel disables conflicting actions while a task runs and surfaces detailed
 diagnostics without relying on modal alerts.
@@ -195,8 +183,6 @@ Repository automation performs fast static validation:
 - ExtendScript module syntax where compatible with Node's parser.
 - Manifest XML well-formedness.
 - Required entry-point presence.
-- Google Docs text parsing, endpoint allowlisting, backup behavior, and a guard
-  against tracking the private configuration.
 
 Integration validation remains manual because Premiere's DOM, QE calls, media
 decoding, and Media Encoder queueing require an installed Adobe host and sample
