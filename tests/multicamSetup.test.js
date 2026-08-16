@@ -44,13 +44,13 @@ function source(name) {
 
 function talkContext(includeSyncMp3) {
     var media = [
-        source("PODCAST347-DAVID-DAY-CHINA-CAM1.MXF"),
-        source("PODCAST347-DAVID-DAY-CHINA-CAM2.MXF"),
-        source("PODCAST347-DAVID-DAY-CHINA-AUDIO-P1.WAV"),
-        source("PODCAST347-DAVID-DAY-CHINA-ZENCASTR.mov")
+        source("PODCAST347-GUEST-TOPIC-CAM1.MXF"),
+        source("PODCAST347-GUEST-TOPIC-CAM2.MXF"),
+        source("PODCAST347-GUEST-TOPIC-AUDIO-P1.WAV"),
+        source("PODCAST347-GUEST-TOPIC-ZENCASTR.mov")
     ];
     if (includeSyncMp3) {
-        media.push(source("PODCAST347-DAVID-DAY-CHINA-AUDIO-FOR-SYNC.mp3"));
+        media.push(source("PODCAST347-GUEST-TOPIC-AUDIO-FOR-SYNC.mp3"));
     }
     return {
         podcastNumber: "347",
@@ -71,20 +71,20 @@ assert(directGroup.items.some(function (item) { return item.ext === "mov"; }));
 assert.strictEqual(directGroup.zencastrSidecar, null);
 
 var movItem = {
-    name: "PODCAST347-DAVID-DAY-CHINA-ZENCASTR.mov",
-    path: "/media/PODCAST347-DAVID-DAY-CHINA-ZENCASTR.mov"
+    name: "PODCAST347-GUEST-TOPIC-ZENCASTR.mov",
+    path: "/media/PODCAST347-GUEST-TOPIC-ZENCASTR.mov"
 };
 var mp3Item = {
-    name: "PODCAST347-DAVID-DAY-CHINA-AUDIO-FOR-SYNC.mp3",
-    path: "/media/PODCAST347-DAVID-DAY-CHINA-AUDIO-FOR-SYNC.mp3"
+    name: "PODCAST347-GUEST-TOPIC-AUDIO-FOR-SYNC.mp3",
+    path: "/media/PODCAST347-GUEST-TOPIC-AUDIO-FOR-SYNC.mp3"
 };
 var wav1Item = {
-    name: "PODCAST347-DAVID-DAY-CHINA-AUDIO-P1.WAV",
-    path: "/media/PODCAST347-DAVID-DAY-CHINA-AUDIO-P1.WAV"
+    name: "PODCAST347-GUEST-TOPIC-AUDIO-P1.WAV",
+    path: "/media/PODCAST347-GUEST-TOPIC-AUDIO-P1.WAV"
 };
 var wav2Item = {
-    name: "PODCAST347-DAVID-DAY-CHINA-AUDIO-P2.WAV",
-    path: "/media/PODCAST347-DAVID-DAY-CHINA-AUDIO-P2.WAV"
+    name: "PODCAST347-GUEST-TOPIC-AUDIO-P2.WAV",
+    path: "/media/PODCAST347-GUEST-TOPIC-AUDIO-P2.WAV"
 };
 function clipCollection(clips) {
     clips.numItems = clips.length;
@@ -123,8 +123,8 @@ function audioTrack(initial) {
 var cameraItems = [];
 for (var camera = 1; camera <= 4; camera++) {
     cameraItems.push({
-        name: "PODCAST347-DAVID-DAY-CHINA-CAM" + camera + ".MXF",
-        path: "/media/PODCAST347-DAVID-DAY-CHINA-CAM" + camera + ".MXF"
+        name: "PODCAST347-GUEST-TOPIC-CAM" + camera + ".MXF",
+        path: "/media/PODCAST347-GUEST-TOPIC-CAM" + camera + ".MXF"
     });
 }
 
