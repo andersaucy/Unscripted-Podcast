@@ -54,23 +54,24 @@ steps into one Premiere panel while keeping editorial decisions inside Premiere.
 - Prepares a clean bin for Premiere's supported multicamera creation workflow.
 - Creates `INTRO-###` and `TALK-###` multicamera source sequences from flexible
   episode filename stems, always ordering CAM1 first.
+- Gracefully skips INTRO multicam creation when no intro media is found (some
+  episodes don't require intro), continuing with TALK-only workflow.
 - Keeps multicam creation independent from the separate **Finish TALK Layout**
   action, so optional Zencastr placement cannot block a valid multicam result.
-- Opens both verified multicam source sequences as Timeline tabs and leaves
+- Opens verified multicam source sequences as Timeline tabs and leaves
   `TALK-###` active when creation finishes.
 - Includes matching recorder WAVs and prefers a unique MP3 containing
   `audio for sync` or `Zencastr` as the TALK sync proxy. After synchronization,
   it places the Zencastr MOV on a new track at the MP3's exact timeline start.
 - Falls back to direct Zencastr MOV synchronization when no proxy MP3 exists.
-- Finishes TALK as CAM1 / Zencastr / CAM2 / CAM3 / CAM4 on V1-V5, with the
-  recorder's three WAV mono channels on A1-A3, the sync MP3 on A4, Zencastr
-  audio on A5, and preserved camera audio on A6 and below.
+- Finishes TALK with flexible camera layout: CAM1 on V1, Zencastr on V2, and any
+  additional cameras (CAM2, CAM3, etc.) sequentially after. Places recorder WAV
+  mono channels on A1-A3, sync MP3 on A4, Zencastr audio on A5, and preserves
+  camera audio on A6 and below.
 - Verifies exact sequence creation, safely skips completed work, and refuses
   ambiguous stems, offline media, or uncertain Zencastr matches.
 - Saves the active project and uses Premiere Project Manager to create a
-  self-contained episode copy beside `01_Assets` and `00_Projects`.
-- Names collected folders from the project (for example,
-  `Collected - Episode123`) and avoids overwriting previous collections.
+  self-contained copy containing all project media and sequences.
 
 #### Operational notes
 
@@ -99,6 +100,25 @@ steps into one Premiere panel while keeping editorial decisions inside Premiere.
 - Clones full-episode and `CLIP` template sequences into `ExportBin`.
 - Inserts each range and applies Cross Dissolve and Constant Power transitions.
 - Detects invalid, inverted, and zero-length ranges before editing the project.
+
+### First draft export
+
+- **First Draft Export** queues the active timeline for MP4 (using "Low Res CBR" preset)
+  and OMF audio export with the following settings:
+  - Export filenames: `{episode} {guest} LowRes V1.mp4` and `{episode} {guest} LowRes V1 audio.omf`
+  - Names are derived from the project filename (e.g., "351 Guest Name.prproj" → "351 Guest Name LowRes V1")
+  - OMF exports are placed in a subfolder named `{episode} {guest} audio` for easier collection and sharing
+  - OMF settings:
+    - Sample Rate: 48000 Hz
+    - Bits per Sample: 16
+    - Files: Separate Audio
+    - Format: AIFF
+  - Render: Copy Complete Audio Files
+  - Handle Frames: 30
+  - Include Pan: enabled
+- The private destination is read from gitignored `config/export-destination.txt`;
+  without it, exports use `Desktop/Podcast Exports`.
+- Both exports use the full timeline duration to avoid accidental partial exports.
 
 ### Adobe Media Encoder delivery
 
@@ -155,6 +175,8 @@ flows.
 │   ├── episodeSetup.jsx       Footage import and audio interpretation
 │   ├── multicamSetup.jsx      INTRO/TALK discovery and selection
 │   ├── collectEpisode.jsx     Premiere Project Manager collection workflow
+│   ├── firstDraftExport.jsx   First draft MP4 and OMF export automation
+│   ├── projectManager.jsx     Consolidated Project Manager action
 │   ├── markClips.jsx          Timestamp-to-sequence workflow
 │   └── renderUnscripted.jsx   Adobe Media Encoder queueing
 ├── config/
@@ -259,7 +281,34 @@ validation fails if the private config becomes tracked.
 
 ## Export configuration
 
-The default export task looks for:
+### First Draft Export
+
+The **First Draft Export** feature:
+- Requires the `LowRes-CBR_1.epr` preset file placed in the `presets` folder within the extension directory
+- Generates export filenames from your project filename in the format: `{episode} {guest} LowRes V1`
+  - Example: Project "351 Guest Name.prproj" → Exports as "351 Guest Name LowRes V1.mp4" and "351 Guest Name LowRes V1 audio.omf"
+- Uses hardcoded OMF settings:
+  - Sample Rate: 48000 Hz
+  - Bits per Sample: 16
+  - Files: Separate Audio
+  - Format: AIFF
+  - Render: Copy Complete Audio Files
+  - Handle Frames: 30
+  - Include Pan: enabled
+
+**Export destination:** copy `config/export-destination.example.txt` to the
+gitignored `config/export-destination.txt`, then enter the local delivery
+folder. MP4 files are written there; OMF packages use an episode audio
+subfolder.
+
+The OMF export is placed in its own subfolder (named `{episode} {guest} audio`) to keep
+the collection of OMF audio files organized. The extension automatically finds the EPR file
+in the `presets` folder. Modify `UP_FIRST_DRAFT` configuration in `host/firstDraftExport.jsx`
+to change preset filenames or destinations.
+
+### Final Export (AME)
+
+The **Render / Queue in AME** task looks for:
 
 ```text
 Documents/
@@ -268,7 +317,7 @@ Documents/
     └── Mp3-Export.epr
 ```
 
-Exports are written to `Podcast Exports` on the current user's Desktop. Update
+Final exports are written to `Podcast Exports` on the Desktop. Update
 the configuration block near the top of `host/renderUnscripted.jsx` when preset
 versions, names, or destinations differ.
 

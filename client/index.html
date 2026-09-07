@@ -26,17 +26,17 @@
                             <span id="configureAudioState" class="action__state action__state--audio">Audio: checking…</span>
                         </span>
                     </span>
-                    <span class="action__desc">First set the V2 MOGRT’s Episode Number from PODCAST### and rename LowRes to ### LowRes_v1; then import 01_Assets/Footage and configure MXF/WAV audio.</span>
+                    <span class="action__desc">Import footage, configure audio, set episode number on MOGRT.</span>
                 </button>
 
                 <button id="btnCreateMulticams" class="action action--primary" type="button">
                     <span class="action__label">Create Episode Multicams</span>
-                    <span class="action__desc">Build and verify INTRO-### and TALK-### from matching cameras, WAV recorders, and the sync MP3, then open both Timeline tabs.</span>
+                    <span class="action__desc">Build INTRO and TALK multicams from cameras and audio.</span>
                 </button>
 
                 <button id="btnFinishTalk" class="action" type="button">
                     <span class="action__label">Finish TALK Layout</span>
-                    <span class="action__desc">Separately arrange WAV P1/P2 on A1-A3, sync MP3 on A4, and place Zencastr video/audio on V2/A5.</span>
+                    <span class="action__desc">Arrange audio tracks, move cameras to V6-V8, duplicate CAM1/Zencastr, place 2x1 PNG.</span>
                 </button>
 
             </div>
@@ -44,19 +44,24 @@
             <div class="actions__group">
                 <div class="actions__heading">Editing &amp; Export</div>
 
-                <button id="btnMarkClips" class="action action--primary" type="button">
-                    <span class="action__label">Mark Clips</span>
-                    <span class="action__desc">Choose episode-ranked Google Docs from the last seven days or use local PodcastClips.txt, then build markers and clip sequences.</span>
+                <button id="btnFirstDraftExport" class="action action--primary" type="button">
+                    <span class="action__label">First Draft Export</span>
+                    <span class="action__desc">Export the active timeline as a Low Res CBR MP4 and an OMF audio package.</span>
                 </button>
 
-                <button id="btnCollectEpisode" class="action" type="button">
-                    <span class="action__label">Collect &amp; Save Episode</span>
-                    <span class="action__desc">Save this project, then create a self-contained episode copy beside 01_Assets and 00_Projects with all project media and sequences.</span>
+                <button id="btnMarkClips" class="action action--primary" type="button">
+                    <span class="action__label">Mark Clips</span>
+                    <span class="action__desc">Import clips from Google Docs or local TXT, create markers and sequences.</span>
+                </button>
+
+                <button id="btnProjectManager" class="action" type="button">
+                    <span class="action__label">Collect &amp; Save with Project Manager</span>
+                    <span class="action__desc">Save the project and create a self-contained copy with all project media.</span>
                 </button>
 
                 <button id="btnRender" class="action" type="button">
                     <span class="action__label">Render / Queue in AME</span>
-                    <span class="action__desc">Send every sequence in ExportBin to Adobe Media Encoder.</span>
+                    <span class="action__desc">Send ExportBin sequences to Adobe Media Encoder.</span>
                 </button>
             </div>
         </main>

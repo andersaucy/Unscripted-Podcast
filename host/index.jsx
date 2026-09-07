@@ -44,3 +44,5 @@ function up_result(ok, message, logArr) {
 #include "episodeSetup.jsx"
 #include "multicamSetup.jsx"
 #include "collectEpisode.jsx"
+#include "firstDraftExport.jsx"
+#include "projectManager.jsx"

@@ -43,10 +43,14 @@ function up_previewEpisodeMulticams() {
         } else {
             var intro = up_mc_buildGroup("intro", context);
             if (!intro.ok) {
-                return up_result(false, intro.message, __log);
+                if (!intro.optionalMissing) {
+                    return up_result(false, intro.message, __log);
+                }
+                __log.push("No INTRO media was found; this optional multicam will be skipped.");
+            } else {
+                up_mc_logGroup(intro, __log);
+                pending.push(introName);
             }
-            up_mc_logGroup(intro, __log);
-            pending.push(introName);
         }
 
         if (talkExists) {
@@ -92,6 +96,11 @@ function up_prepareEpisodeMulticam(groupKey) {
         }
         var group = up_mc_buildGroup(groupKey, context);
         if (!group.ok) {
+            if (normalizedKey === "intro" && group.optionalMissing) {
+                return up_result(true,
+                    "Skipped optional INTRO multicam because no INTRO media was found.",
+                    __log);
+            }
             return up_result(false, group.message, __log);
         }
         if (typeof app.getProjectViewIDs !== "function" ||
@@ -188,20 +197,23 @@ function up_openEpisodeMulticams() {
         var talkName = "TALK-" + podcastNumber;
         var intro = up_mc_findSequence(introName);
         var talk = up_mc_findSequence(talkName);
-        if (!intro || !talk) {
+        if (!talk) {
             return up_result(false,
-                "Could not open multicam timelines because " +
-                    (!intro ? introName : talkName) + " was not found.",
+                "Could not open multicam timelines because " + talkName +
+                    " was not found.",
                 __log);
         }
 
-        // Opening INTRO first and TALK second keeps both tabs available while
-        // leaving the main TALK multicam active for the editor.
-        app.project.openSequence(intro.sequenceID);
+        // Opening INTRO first when present and TALK second leaves the main
+        // TALK multicam active for the editor.
+        if (intro) { app.project.openSequence(intro.sequenceID); }
         app.project.openSequence(talk.sequenceID);
-        __log.push("Opened " + introName + " and " + talkName + " as Timeline tabs.");
+        __log.push(intro ?
+            "Opened " + introName + " and " + talkName + " as Timeline tabs." :
+            "Opened " + talkName + "; no optional INTRO multicam exists.");
         return up_result(true,
-            "Opened both episode multicam timelines; " + talkName + " is active.",
+            (intro ? "Opened both episode multicam timelines; " :
+                "Opened the TALK multicam timeline; ") + talkName + " is active.",
             __log);
     } catch (e) {
         var where = e.line ? (" (line " + e.line + ")") : "";
@@ -237,11 +249,32 @@ function up_prepareTalkTrackLayout() {
         }
 
         var cameraTracks = up_mc_cameraTrackPositions(sequence);
-        var compact = cameraTracks[1] === 0 && cameraTracks[2] === 1 &&
-            cameraTracks[3] === 2 && cameraTracks[4] === 3;
-        var arranged = cameraTracks[1] === 0 && cameraTracks[2] === 2 &&
-            cameraTracks[3] === 3 && cameraTracks[4] === 4;
         var zencastrTrack = up_mc_zencastrVideoTrack(sequence);
+
+        // Build list of all camera numbers present (sorted)
+        var cameraNumbers = [];
+        for (var camNum in cameraTracks) {
+            if (cameraTracks.hasOwnProperty(camNum)) {
+                cameraNumbers.push(Number(camNum));
+            }
+        }
+        cameraNumbers.sort(function(a, b) { return a - b; });
+
+        // Check if cameras are in "compact" layout (all sequential from track 0)
+        var compact = cameraNumbers.length > 0 && cameraTracks[cameraNumbers[0]] === 0;
+        for (var i = 1; i < cameraNumbers.length && compact; i++) {
+            if (cameraTracks[cameraNumbers[i]] !== i) {
+                compact = false;
+            }
+        }
+
+        // Check if cameras are in "arranged" layout (CAM1 on V1, others after Zencastr)
+        var arranged = cameraNumbers.length > 0 && cameraTracks[cameraNumbers[0]] === 0;
+        for (var i = 1; i < cameraNumbers.length && arranged; i++) {
+            if (cameraTracks[cameraNumbers[i]] !== i + 1) { // +1 to skip Zencastr track
+                arranged = false;
+            }
+        }
 
         if (arranged && zencastrTrack === 1) {
             response.videoTracksToAdd = 0;
@@ -250,7 +283,7 @@ function up_prepareTalkTrackLayout() {
         } else if (arranged && zencastrTrack === -1) {
             response.videoTracksToAdd = 0;
         } else {
-            response.message = "TALK video tracks are not in a safe CAM1-CAM4 layout; " +
+            response.message = "TALK video tracks are not in a safe camera layout; " +
                 "no tracks were changed.";
             return up_mc_trackLayoutJSON(response);
         }
@@ -405,6 +438,13 @@ function up_mc_introItems(context) {
         if (context.media[i].normalizedName.indexOf("INTRO") !== -1) {
             items.push(context.media[i]);
         }
+    }
+    if (items.length === 0) {
+        return {
+            ok: false,
+            optionalMissing: true,
+            message: "No INTRO media was found in the Footage bin."
+        };
     }
     return { ok: true, stem: "INTRO", items: items };
 }
@@ -722,14 +762,38 @@ function up_finalizeTalkMulticam() {
                 __log);
         }
 
+        // Verify flexible camera layout: CAM1 on V1, Zencastr on V2, other cameras sequential after
         var cameraTracks = up_mc_cameraTrackPositions(sequence);
-        if (cameraTracks[1] !== 0 || cameraTracks[2] !== 2 ||
-                cameraTracks[3] !== 3 || cameraTracks[4] !== 4 ||
-                up_mc_zencastrVideoTrack(sequence) !== 1) {
+        var zencastrTrack = up_mc_zencastrVideoTrack(sequence);
+
+        if (cameraTracks[1] !== 0) {
             return up_result(false,
-                "TALK video layout verification failed; expected CAM1/Zencastr/" +
-                    "CAM2/CAM3/CAM4 on V1-V5.",
+                "TALK video layout verification failed; CAM1 must be on V1.",
                 __log);
+        }
+        if (zencastrTrack !== 1) {
+            return up_result(false,
+                "TALK video layout verification failed; Zencastr must be on V2.",
+                __log);
+        }
+
+        // Verify other cameras are sequential after Zencastr (starting at track 2)
+        var cameraNumbers = [];
+        for (var camNum in cameraTracks) {
+            if (cameraTracks.hasOwnProperty(camNum) && Number(camNum) > 1) {
+                cameraNumbers.push(Number(camNum));
+            }
+        }
+        cameraNumbers.sort(function(a, b) { return a - b; });
+        for (var i = 0; i < cameraNumbers.length; i++) {
+            var expectedTrack = 2 + i; // Start at track 2 (V3), after Zencastr
+            if (cameraTracks[cameraNumbers[i]] !== expectedTrack) {
+                return up_result(false,
+                    "TALK video layout verification failed; CAM" + cameraNumbers[i] +
+                    " should be on V" + (expectedTrack + 1) + " but is on V" +
+                    (cameraTracks[cameraNumbers[i]] + 1) + ".",
+                    __log);
+            }
         }
 
         var wavs = up_mc_findAudioClipsByExtension(sequence, ["wav", "wave"]);
@@ -781,7 +845,20 @@ function up_finalizeTalkMulticam() {
         }
 
         __log.push("Sync MP3 starts at " + syncSeconds.toFixed(3) + " seconds.");
-        __log.push("Video: CAM1 / Zencastr / CAM2 / CAM3 / CAM4 on V1-V5.");
+
+        // Build flexible camera layout message
+        var cameraList = ["CAM1", "Zencastr"];
+        var cameraNumbers = [];
+        for (var camNum in cameraTracks) {
+            if (cameraTracks.hasOwnProperty(camNum) && Number(camNum) > 1) {
+                cameraNumbers.push(Number(camNum));
+            }
+        }
+        cameraNumbers.sort(function(a, b) { return a - b; });
+        for (var i = 0; i < cameraNumbers.length; i++) {
+            cameraList.push("CAM" + cameraNumbers[i]);
+        }
+        __log.push("Video: " + cameraList.join(" / ") + " on V1-V" + (cameraList.length) + ".");
         __log.push("Audio: WAV mono channels on A1-A3, sync MP3 on A4, " +
             "Zencastr MOV on A5; camera audio preserved on A6 and below.");
         return up_result(true,

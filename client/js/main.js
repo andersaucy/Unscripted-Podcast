@@ -12,7 +12,8 @@
         episodeIdentityState: document.getElementById("episodeIdentityState"),
         createMulticams: document.getElementById("btnCreateMulticams"),
         finishTalk: document.getElementById("btnFinishTalk"),
-        collectEpisode: document.getElementById("btnCollectEpisode"),
+        firstDraftExport: document.getElementById("btnFirstDraftExport"),
+        projectManager: document.getElementById("btnProjectManager"),
         render: document.getElementById("btnRender"),
         clearLog: document.getElementById("btnClearLog"),
         toggleLog: document.getElementById("btnToggleLog"),
@@ -62,7 +63,8 @@
         els.importFootage.disabled = isBusy;
         els.createMulticams.disabled = isBusy;
         els.finishTalk.disabled = isBusy;
-        els.collectEpisode.disabled = isBusy;
+        els.firstDraftExport.disabled = isBusy;
+        els.projectManager.disabled = isBusy;
         els.markClips.disabled = isBusy;
         els.render.disabled = isBusy;
     }
@@ -626,9 +628,7 @@
                 callback(prepared);
                 return;
             }
-            if (String(prepared.message || "").indexOf(
-                    "Skipped existing multicam source sequence "
-                ) === 0) {
+            if (String(prepared.message || "").indexOf("Skipped ") === 0) {
                 callback(prepared);
                 return;
             }
@@ -765,6 +765,7 @@
                     return;
                 }
                 appendLog("\u2714 " + introResult.message);
+
                 setStatus("Creating TALK multicam\u2026", "busy");
 
                 runMulticamGroup("talk", function (talkResult) {
@@ -783,7 +784,7 @@
                             setStatus(opened.message, "err");
                             appendLog("\u2716 " + opened.message);
                         } else {
-                            var done = "INTRO and TALK multicams are ready and open.";
+                            var done = "Multicam sequences are ready and open.";
                             appendLog("\u2714 " + opened.message);
                             setStatus(done, "ok");
                             appendLog("\u2714 " + done);
@@ -936,8 +937,12 @@
         runFinishTalkWorkflow();
     });
 
-    els.collectEpisode.addEventListener("click", function () {
-        runTask("Collecting and saving episode", "up_collectAndSaveEpisode()");
+    els.firstDraftExport.addEventListener("click", function () {
+        runTask("Exporting first draft (MP4 + OMF)", "up_firstDraftExport()");
+    });
+
+    els.projectManager.addEventListener("click", function () {
+        runTask("Collecting and saving with Project Manager", "up_openProjectManager()");
     });
 
     els.render.addEventListener("click", function () {
