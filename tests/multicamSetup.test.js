@@ -70,6 +70,10 @@ assert.strictEqual(directGroup.ok, true);
 assert(directGroup.items.some(function (item) { return item.ext === "mov"; }));
 assert.strictEqual(directGroup.zencastrSidecar, null);
 
+var missingIntro = context.up_mc_buildGroup("intro", talkContext(true));
+assert.strictEqual(missingIntro.ok, false);
+assert.strictEqual(missingIntro.optionalMissing, true);
+
 var movItem = {
     name: "PODCAST347-GUEST-TOPIC-ZENCASTR.mov",
     path: "/media/PODCAST347-GUEST-TOPIC-ZENCASTR.mov"
@@ -190,6 +194,14 @@ context.up_visitProjectItems = function (root, callback) { callback(movItem); };
 var opened = JSON.parse(context.up_openEpisodeMulticams());
 assert.strictEqual(opened.ok, true, opened.message);
 assert.deepStrictEqual(openedSequenceIds.slice(-2), ["intro-347-id", "talk-347-id"]);
+
+context.app.project.sequences = [sequence];
+context.app.project.sequences.numSequences = 1;
+openedSequenceIds.length = 0;
+var openedTalkOnly = JSON.parse(context.up_openEpisodeMulticams());
+assert.strictEqual(openedTalkOnly.ok, true, openedTalkOnly.message);
+assert.deepStrictEqual(openedSequenceIds, ["talk-347-id"]);
+context.app.project.sequences = sequences;
 
 var preparation = JSON.parse(context.up_prepareTalkTrackLayout());
 assert.strictEqual(preparation.ok, true, preparation.message);

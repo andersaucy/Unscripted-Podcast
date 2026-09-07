@@ -9,4 +9,5 @@ outputs/
 
 # Private Google Docs bridge credentials. Commit only the example file.
 config/google-docs.json
+config/export-destination.txt
 .clasp.json

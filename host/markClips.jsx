@@ -157,39 +157,55 @@ function up_markClips() {
 
         // --- Clone the full episode + CLIP template sequences into ExportBin ---
         var clonedFullSequence = null;
+        var clipTemplateSeq = null;
         var expBin = project.rootItem.createBin("ExportBin");
+
+        // Find the sequences we need to clone
         for (var s = 0; s < project.sequences.length; s++) {
             var seq = project.sequences[s];
 
-            if (seq === fullEpisodeSeq ||
+            // Find the full episode sequence
+            if (!clonedFullSequence && (seq === fullEpisodeSeq ||
                     (seq.sequenceID && fullEpisodeSeq.sequenceID &&
-                        seq.sequenceID === fullEpisodeSeq.sequenceID)) {
-                for (var a = 0; a < seq.audioTracks.numTracks; a++) {
-                    seq.audioTracks[a].setMute(1);
-                }
-                if (seq.clone()) {
-                    clonedFullSequence = app.project.activeSequence;
-                    clonedFullSequence.name = clipTitles[0];
-                    clonedFullSequence.projectItem.moveBin(expBin);
-                    seq.name = "FULL Clone Successful";
-                }
+                        seq.sequenceID === fullEpisodeSeq.sequenceID))) {
+                fullEpisodeSeq = seq; // Store reference
             }
 
-            // Duplicate the "CLIP" template once per clip (count from .txt).
-            if (seq.name === "CLIP") {
-                for (var c = 1; c <= clipCount; c++) {
-                    if (seq.clone()) {
-                        var clonedClipSequence = app.project.activeSequence;
-                        var cloneName = clipTitles[c];
-                        if (cloneName === undefined || cloneName === null) {
-                            cloneName = "CLIP " + c;
-                        }
-                        clonedClipSequence.name = cloneName;
-                        clonedClipSequence.projectItem.moveBin(expBin);
-                    }
-                }
-                seq.name = "CLIP Clone Successful";
+            // Find the CLIP template
+            if (!clipTemplateSeq && seq.name === "CLIP") {
+                clipTemplateSeq = seq;
             }
+        }
+
+        // Clone the full episode sequence ONCE
+        if (fullEpisodeSeq) {
+            for (var a = 0; a < fullEpisodeSeq.audioTracks.numTracks; a++) {
+                fullEpisodeSeq.audioTracks[a].setMute(1);
+            }
+            if (fullEpisodeSeq.clone()) {
+                clonedFullSequence = app.project.activeSequence;
+                clonedFullSequence.name = clipTitles[0];
+                clonedFullSequence.projectItem.moveBin(expBin);
+                fullEpisodeSeq.name = "FULL Clone Successful";
+                __log.push("Cloned full episode sequence: " + clipTitles[0]);
+            }
+        }
+
+        // Clone the CLIP template once per clip
+        if (clipTemplateSeq) {
+            for (var c = 1; c <= clipCount; c++) {
+                if (clipTemplateSeq.clone()) {
+                    var clonedClipSequence = app.project.activeSequence;
+                    var cloneName = clipTitles[c];
+                    if (cloneName === undefined || cloneName === null) {
+                        cloneName = "CLIP " + c;
+                    }
+                    clonedClipSequence.name = cloneName;
+                    clonedClipSequence.projectItem.moveBin(expBin);
+                }
+            }
+            clipTemplateSeq.name = "CLIP Clone Successful";
+            __log.push("Cloned " + clipCount + " CLIP template sequence(s).");
         }
 
         if (!clonedFullSequence) {
